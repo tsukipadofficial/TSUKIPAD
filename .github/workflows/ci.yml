@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  contracts:
+    name: contracts (forge test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # The pool tests load prebuilt Uniswap V3 artifacts from the npm packages
+      # via vm.getCode, so these must be installed before forge test runs.
+      - name: Install Uniswap artifacts
+        run: npm ci
+        working-directory: contracts/tools
+      - name: Build
+        run: forge build --sizes
+        working-directory: contracts
+      - name: Test
+        run: forge test -vv
+        working-directory: contracts
+
+  web:
+    name: web (typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install
+        run: pnpm install --frozen-lockfile
+        working-directory: web
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+        working-directory: web
+      - name: Build
+        run: pnpm build
+        working-directory: web

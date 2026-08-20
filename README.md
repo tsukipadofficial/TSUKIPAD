@@ -1,5 +1,7 @@
 # TSUKIPAD
 
+[![ci](https://github.com/tsukipadofficial/TSUKIPAD/actions/workflows/ci.yml/badge.svg)](https://github.com/tsukipadofficial/TSUKIPAD/actions/workflows/ci.yml)
+
 A fair-launch token launchpad for [Arc](https://arc.io), Circle's stablecoin L1.
 
 Tokens launch **directly into a real Uniswap V3 USDC pool** at a ~$3K market cap,
@@ -175,7 +177,24 @@ chain-agnostic.
 
 ## Status
 
-- Contracts: complete, 18 passing tests, validated against a fork of Arc testnet.
+- Contracts: complete, 81 passing tests across 9 suites, including an adversarial suite.
 - Frontend: complete — board, create flow, token page with live trades and trading.
-- **Not yet deployed to Arc testnet** — that step needs a funded key.
-- Not audited. Testnet only.
+- **Deployed to Arc testnet** (chain 5042002) — addresses in `contracts/deployments/5042002.json`.
+- Live at [tsukipad.com](https://www.tsukipad.com), verified end to end against the deployed contracts.
+- Arc mainnet is expected 16 September 2026; see `MAINNET.md` for the pre-flight checklist.
+- **Not audited.** Testnet only for now. Use at your own risk.
+
+
+## Running the tests
+
+The pool tests load prebuilt Uniswap V3 artifacts through `vm.getCode`, so the
+npm packages must be installed before Foundry runs:
+
+```bash
+git clone --recursive https://github.com/tsukipadofficial/TSUKIPAD.git
+cd TSUKIPAD/contracts/tools && npm ci
+cd .. && forge test
+```
+
+81 tests across 9 suites, covering launches, the creator lock, fee accounting,
+buyback-and-burn, holder rewards, on-chain metadata, and an adversarial suite.
