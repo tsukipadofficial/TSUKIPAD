@@ -1,0 +1,36 @@
+<!doctype html><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{width:1600px;background:#121216;font-family:'JetBrains Mono',monospace;color:#8c8c99;padding:40px}
+  h2{color:#c8ff2e;font-size:15px;margin:0 0 12px;letter-spacing:1px}
+  .wrap{position:relative;width:1500px;height:500px;margin-bottom:8px}
+  .wrap img{width:1500px;height:500px;display:block}
+  /* X crops top+bottom on mobile: only the middle band is guaranteed visible */
+  .crop{position:absolute;left:0;right:0;background:rgba(255,61,139,.30);
+        border-top:2px dashed #ff3d8b;border-bottom:2px dashed #ff3d8b}
+  .crop.t{top:0;height:100px}.crop.b{bottom:0;height:100px}
+  /* the avatar overlay, at X's real position/size */
+  .av{position:absolute;left:30px;bottom:-45px;width:200px;height:200px;border-radius:50%;
+      border:6px solid #121216;overflow:hidden}
+  .av img{width:100%;height:100%}
+  .row{display:flex;gap:36px;align-items:flex-end;margin:60px 0 0}
+  .chip{text-align:center}
+  .chip img{border-radius:50%;display:block;margin-bottom:8px}
+  small{font-size:12px;color:#5b5b68}
+</style>
+<h2>BANNER — pink = cropped on mobile · circle = avatar overlay</h2>
+<div class="wrap">
+  <img src="../tsukipad-x-banner@2x.png">
+  <div class="crop t"></div><div class="crop b"></div>
+  <div class="av"><img src="../tsukipad-x-pfp-a@2x.png"></div>
+</div>
+
+<div class="row">
+  <div class="chip"><img src="../tsukipad-x-pfp-a@2x.png" width="180" height="180"><br><small>A — full bleed · 180px</small></div>
+  <div class="chip"><img src="../tsukipad-x-pfp-a@2x.png" width="64" height="64"><br><small>A · 64px (timeline)</small></div>
+  <div class="chip"><img src="../tsukipad-x-pfp-a@2x.png" width="32" height="32"><br><small>A · 32px</small></div>
+  <div class="chip"><img src="../tsukipad-x-pfp-b@2x.png" width="180" height="180"><br><small>B — tile · 180px</small></div>
+  <div class="chip"><img src="../tsukipad-x-pfp-b@2x.png" width="64" height="64"><br><small>B · 64px (timeline)</small></div>
+  <div class="chip"><img src="../tsukipad-x-pfp-b@2x.png" width="32" height="32"><br><small>B · 32px</small></div>
+</div>

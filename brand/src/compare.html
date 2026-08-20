@@ -1,0 +1,73 @@
+<!doctype html><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+JP:wght@500&display=block" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:1600px;height:900px;background:#08080a;overflow:hidden;position:relative;
+     font-family:'JetBrains Mono',monospace;color:#f4f4f0}
+.grid{position:absolute;inset:0;
+  background-image:linear-gradient(#17171d 1px,transparent 1px),linear-gradient(90deg,#17171d 1px,transparent 1px);
+  background-size:50px 50px}
+.wrap{position:relative;padding:54px 64px;height:790px;display:flex;flex-direction:column}
+.eyebrow{display:flex;align-items:center;gap:13px;font-family:'Space Grotesk',sans-serif;
+         font-weight:700;font-size:23px;letter-spacing:-.5px}
+.eyebrow b{color:#c8ff2e}
+.eyebrow i{font-family:'Noto Sans JP',sans-serif;font-style:normal;color:#93bf1f;font-size:20px}
+h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:70px;letter-spacing:-3px;margin:20px 0 34px}
+.cols{flex:1;display:flex;gap:40px;align-items:stretch}
+.col{flex:1;display:flex;flex-direction:column}
+.hd{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:21px;letter-spacing:2px;
+    padding-bottom:14px;margin-bottom:20px;border-bottom:2px solid #2c2c35}
+.col.them .hd{color:#5b5b68}
+.col.us .hd{color:#c8ff2e;border-bottom-color:#c8ff2e}
+.step{flex:1;background:#121216;border:2px solid #2c2c35;padding:0 24px;font-size:25px;
+      color:#8c8c99;margin-bottom:10px;display:flex;gap:17px;align-items:center}
+.step span{color:#43434f;font-weight:700;min-width:24px}
+.arrow{color:#2c2c35;font-size:21px;text-align:center;margin:-6px 0 6px}
+.big{flex:1;display:flex;flex-direction:column;justify-content:center;background:#c8ff2e;border:2px solid #08080a;box-shadow:11px 11px 0 #93bf1f;
+     padding:38px 34px;color:#08080a}
+.big .k{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:47px;
+        line-height:1.14;letter-spacing:-1.5px}
+.big .s{margin-top:20px;font-size:23px;font-weight:500;line-height:1.5;opacity:.82}
+.tags{margin-top:22px;display:flex;flex-wrap:wrap;gap:11px}
+.tag{border:2px solid #c8ff2e;color:#c8ff2e;padding:11px 17px;font-size:19px;font-weight:700}
+.foot{position:absolute;left:64px;right:64px;bottom:40px;display:flex;justify-content:space-between;
+      align-items:center;font-size:21px;color:#5b5b68}
+.foot b{color:#f4f4f0;font-weight:500;letter-spacing:1px}
+</style>
+<div class="grid"></div>
+<div class="wrap">
+  <div class="eyebrow">
+    <svg width="30" height="30" viewBox="0 0 52 52">
+      <rect x="6" y="6" width="44" height="44" fill="#93bf1f"/>
+      <rect x="2" y="2" width="44" height="44" fill="#c8ff2e" stroke="#08080a" stroke-width="2.5"/>
+      <path d="M8 39 C 22 39, 31 34, 38 10" fill="none" stroke="#08080a" stroke-width="6.5" stroke-linecap="square"/>
+      <rect x="33" y="6" width="9" height="9" fill="#08080a"/><rect x="6" y="36" width="6" height="6" fill="#ff3d8b"/>
+    </svg>
+<span>TSUKI<b>PAD</b></span><i>月</i>  </div>
+  <h1>two ways to launch a token</h1>
+  <div class="cols">
+    <div class="col them">
+      <div class="hd">THE USUAL WAY</div>
+      <div class="step"><span>01</span>fund the pool yourself</div>
+      <div class="arrow">↓</div>
+      <div class="step"><span>02</span>sit on a bonding curve</div>
+      <div class="arrow">↓</div>
+      <div class="step"><span>03</span>hope it graduates</div>
+      <div class="arrow">↓</div>
+      <div class="step"><span>04</span>finally get a real pool</div>
+    </div>
+    <div class="col us">
+      <div class="hd">TSUKIPAD</div>
+      <div class="big">
+        <div class="k">a real Uniswap V3<br>pool. block one.</div>
+        <div class="s">Single-sided liquidity, so the pool is seeded entirely with your token. You put up none of it.</div>
+      </div>
+      <div class="tags">
+        <div class="tag">NO PRESALE</div>
+        <div class="tag">NO BONDING CURVE</div>
+        <div class="tag">LOCKED FOREVER</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="foot"><b>tsukipad.com</b><span>live on Arc testnet · Arc mainnet Sept 16</span></div>

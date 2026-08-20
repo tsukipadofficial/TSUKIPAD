@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="52" height="52">
+  <!-- Browser-tab mark. Heavier strokes than the in-app logo: at 16px the
+       thin version muddies, so the curve is thickened and the shadow dropped. -->
+  <rect width="52" height="52" fill="#08080a"/>
+  <rect x="4" y="4" width="44" height="44" fill="#c8ff2e"/>
+  <path d="M10 40 C 24 40, 33 35, 40 11" fill="none" stroke="#08080a" stroke-width="8" stroke-linecap="square"/>
+  <rect x="34" y="7" width="10" height="10" fill="#08080a"/>
+</svg>

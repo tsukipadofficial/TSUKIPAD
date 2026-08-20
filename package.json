@@ -1,0 +1,11 @@
+{
+  "name": "tsukipad",
+  "private": true,
+  "scripts": {
+    "dev": "cd web && pnpm dev",
+    "build": "cd web && pnpm build",
+    "chain": "./scripts/local-dev.sh",
+    "test": "cd contracts && forge test -vv",
+    "abi": "cd contracts && forge build && node script/gen-abi.mjs"
+  }
+}

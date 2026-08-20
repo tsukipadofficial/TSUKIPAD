@@ -1,0 +1,85 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@500&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1500px; height:500px; overflow:hidden; background:#08080a; }
+</style>
+
+<svg width="1500" height="500" viewBox="0 0 1500 500" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+      <path d="M50 0 L0 0 0 50" fill="none" stroke="#17171d" stroke-width="1"/>
+    </pattern>
+    <!-- crescent: a disc with a second disc punched out -->
+    <mask id="crescent">
+      <rect width="1500" height="500" fill="#000"/>
+      <circle cx="1336" cy="132" r="142" fill="#fff"/>
+      <circle cx="1262" cy="82"  r="132" fill="#000"/>
+    </mask>
+    <clipPath id="frame"><rect width="1500" height="500"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <rect width="1500" height="500" fill="#08080a"/>
+    <rect width="1500" height="500" fill="url(#grid)"/>
+
+    <!-- 月 — the moon, recessive so the curve reads first -->
+    <g mask="url(#crescent)">
+      <rect x="1120" y="-60" width="380" height="360" fill="#93bf1f" fill-opacity="0.22"/>
+    </g>
+
+    <!-- the price curve: flat and cheap early, vertical near the ceiling -->
+    <path d="M812 398 C 1010 398, 1140 368, 1258 146" fill="none"
+          stroke="#93bf1f" stroke-width="22" stroke-linecap="square"
+          transform="translate(9,9)"/>
+    <path d="M812 398 C 1010 398, 1140 368, 1258 146" fill="none"
+          stroke="#c8ff2e" stroke-width="22" stroke-linecap="square"/>
+
+    <!-- start marker (pink) and ceiling marker (black on lime) -->
+    <rect x="798" y="384" width="28" height="28" fill="#ff3d8b"/>
+    <rect x="1236" y="122" width="48" height="48" fill="#08080a" stroke="#c8ff2e" stroke-width="5"/>
+    <rect x="1046" y="357" width="16" height="16" fill="#29e5f5"/>
+
+    <!-- ================= wordmark block ================= -->
+    <!-- clear of the avatar overlay (bottom-left ~300×300) -->
+    <g transform="translate(392,150)">
+      <!-- logo mark, exact geometry from components/Logo.tsx -->
+      <g transform="scale(1.32)">
+        <rect x="6" y="6" width="44" height="44" fill="#93bf1f"/>
+        <rect x="2" y="2" width="44" height="44" fill="#c8ff2e" stroke="#08080a" stroke-width="2.5"/>
+        <path d="M8 39 C 22 39, 31 34, 38 10" fill="none" stroke="#08080a"
+              stroke-width="6.5" stroke-linecap="square"/>
+        <rect x="33" y="6" width="9" height="9" fill="#08080a"/>
+        <rect x="6" y="36" width="6" height="6" fill="#ff3d8b"/>
+      </g>
+
+      <text x="94" y="56" font-family="'Space Grotesk',sans-serif" font-size="66"
+            font-weight="700" letter-spacing="-2.5">
+        <tspan fill="#f4f4f0">TSUKI</tspan><tspan fill="#c8ff2e">PAD</tspan><tspan
+          font-family="'Noto Sans JP',sans-serif" font-size="40" font-weight="500"
+          fill="#93bf1f" dx="22">月</tspan>
+      </text>
+
+      <text x="97" y="104" font-family="'JetBrains Mono',monospace" font-size="21"
+            font-weight="400" fill="#8c8c99" letter-spacing="0.5">
+        Fair launch into a real Uniswap V3 pool.
+      </text>
+
+      <!-- claim badge -->
+      <g transform="translate(97,132)">
+        <rect x="4" y="4" width="234" height="46" fill="#93bf1f"/>
+        <rect width="234" height="46" fill="#c8ff2e" stroke="#08080a" stroke-width="2"/>
+        <text x="117" y="31" font-family="'Space Grotesk',sans-serif" font-size="21"
+              font-weight="700" fill="#08080a" text-anchor="middle">NO SEED CAPITAL</text>
+      </g>
+      <text x="352" y="163" font-family="'JetBrains Mono',monospace" font-size="19"
+            fill="#5b5b68">liquidity locked forever</text>
+      <text x="97" y="222" font-family="'JetBrains Mono',monospace" font-size="20"
+            font-weight="500" fill="#8c8c99" letter-spacing="1">tsukipad.com</text>
+    </g>
+
+  </g>
+</svg>

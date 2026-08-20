@@ -1,0 +1,116 @@
+<!doctype html><meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+JP:wght@500;700&display=block" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000}
+.sheet{display:flex;flex-wrap:wrap;width:max-content}
+.cell{width:1280px;height:720px;position:relative;overflow:hidden}
+
+/* Every animated element shares one 15s timeline and is PAUSED; the cell's
+   negative delay selects the exact instant to render. That makes each frame
+   deterministic and independent of wall-clock or virtual time. */
+.cell *{animation-duration:15s!important;animation-timing-function:linear!important;
+        animation-iteration-count:1!important;animation-fill-mode:both!important;
+        animation-play-state:paused!important}
+
+.stage{position:absolute;inset:0;background:#08080a;overflow:hidden}
+.grid{position:absolute;inset:0;
+  background-image:linear-gradient(#17171d 1px,transparent 1px),linear-gradient(90deg,#17171d 1px,transparent 1px);
+  background-size:48px 48px;animation-name:gridIn}
+@keyframes gridIn{0%{opacity:0}4%{opacity:1}100%{opacity:1}}
+
+svg{position:absolute;inset:0}
+.moon{animation-name:moonIn}
+@keyframes moonIn{0%,12%{opacity:0}18%{opacity:.22}100%{opacity:.22}}
+
+.draw{stroke-dasharray:1;stroke-dashoffset:1;animation-name:draw}
+@keyframes draw{0%,2%{stroke-dashoffset:1}16%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+
+.tip{animation-name:tipIn}
+@keyframes tipIn{0%,15.5%{opacity:0}17.5%{opacity:1}100%{opacity:1}}
+.startmk{animation-name:startIn;transform-box:fill-box;transform-origin:center}
+@keyframes startIn{0%,2%{opacity:0;transform:scale(.4)}5%{opacity:1;transform:scale(1)}100%{opacity:1;transform:scale(1)}}
+
+.lockup{position:absolute;left:96px;top:236px;display:flex;align-items:center;gap:22px;
+        animation-name:lockIn;transform-origin:left center}
+@keyframes lockIn{0%,17.3%{opacity:0;transform:translateY(26px)}21.3%{opacity:1;transform:translateY(0)}100%{opacity:1;transform:translateY(0)}}
+.wm{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:76px;letter-spacing:-3px;color:#f4f4f0;white-space:nowrap}
+.wm b{color:#c8ff2e;font-weight:700}
+.wm i{font-family:'Noto Sans JP',sans-serif;font-style:normal;font-size:46px;font-weight:500;color:#93bf1f;margin-left:18px}
+
+.line{position:absolute;left:96px;top:398px;font-family:'JetBrains Mono',monospace;
+      font-size:34px;line-height:1.42;color:#f4f4f0;white-space:pre-line}
+.l1{animation-name:l1}
+@keyframes l1{0%,26.7%{opacity:0;transform:translateY(16px)}29.3%,45.3%{opacity:1;transform:translateY(0)}47.3%,100%{opacity:0;transform:translateY(0)}}
+.l2{animation-name:l2}
+@keyframes l2{0%,48.7%{opacity:0;transform:translateY(16px)}51.3%,64%{opacity:1;transform:translateY(0)}66%,100%{opacity:0}}
+.l3{animation-name:l3}
+@keyframes l3{0%,67.3%{opacity:0;transform:translateY(16px)}70%,82%{opacity:1;transform:translateY(0)}84%,100%{opacity:0}}
+
+.endblk{position:absolute;left:96px;top:392px;animation-name:endIn}
+@keyframes endIn{0%,86%{opacity:0;transform:translateY(16px)}89.3%{opacity:1;transform:translateY(0)}100%{opacity:1;transform:translateY(0)}}
+.badge{position:relative;display:inline-block;background:#c8ff2e;border:2px solid #08080a;
+       box-shadow:5px 5px 0 #93bf1f;padding:11px 22px;font-family:'Space Grotesk',sans-serif;
+       font-weight:700;font-size:24px;color:#08080a}
+.url{margin-top:30px;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:38px;color:#f4f4f0;letter-spacing:1px}
+.status{margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:21px;color:#8c8c99}
+</style>
+<div class="sheet" id="sheet"></div>
+<template id="tpl">
+<div class="stage">
+  <div class="grid"></div>
+  <svg viewBox="0 0 1280 720" width="1280" height="720">
+    <defs>
+      <mask id="cres">
+        <rect width="1280" height="720" fill="#000"/>
+        <circle cx="1148" cy="150" r="176" fill="#fff"/>
+        <circle cx="1058" cy="86" r="164" fill="#000"/>
+      </mask>
+    </defs>
+    <g class="moon" mask="url(#cres)"><rect x="900" y="-80" width="380" height="420" fill="#93bf1f"/></g>
+    <path class="draw" pathLength="1" d="M566 632 C 812 632, 948 592, 1152 138" fill="none"
+          stroke="#93bf1f" stroke-width="26" stroke-linecap="square" transform="translate(10,10)"/>
+    <path class="draw" pathLength="1" d="M566 632 C 812 632, 948 592, 1152 138" fill="none"
+          stroke="#c8ff2e" stroke-width="26" stroke-linecap="square"/>
+    <rect class="startmk" x="550" y="616" width="32" height="32" fill="#ff3d8b"/>
+    <rect class="tip" x="1128" y="114" width="52" height="52" fill="#08080a" stroke="#c8ff2e" stroke-width="5"/>
+  </svg>
+  <div class="lockup">
+    <svg width="76" height="76" viewBox="0 0 52 52" style="position:static">
+      <rect x="6" y="6" width="44" height="44" fill="#93bf1f"/>
+      <rect x="2" y="2" width="44" height="44" fill="#c8ff2e" stroke="#08080a" stroke-width="2.5"/>
+      <path d="M8 39 C 22 39, 31 34, 38 10" fill="none" stroke="#08080a" stroke-width="6.5" stroke-linecap="square"/>
+      <rect x="33" y="6" width="9" height="9" fill="#08080a"/>
+      <rect x="6" y="36" width="6" height="6" fill="#ff3d8b"/>
+    </svg>
+    <div class="wm">TSUKI<b>PAD</b><i>月</i></div>
+  </div>
+  <div class="line l1">Your token opens as a real
+Uniswap V3 pool, paired with USDC.</div>
+  <div class="line l2">Single-sided liquidity —
+you seed none of it yourself.</div>
+  <div class="line l3">No presale. No team allocation.
+Liquidity locked forever.</div>
+  <div class="endblk">
+    <div class="badge">NO SEED CAPITAL</div>
+    <div class="url">tsukipad.com</div>
+    <div class="status">Live on Arc testnet · Arc mainnet Sept 16</div>
+  </div>
+</div>
+</template>
+<script>
+const q = new URLSearchParams(location.search);
+const from = +(q.get('from')||0), count = +(q.get('count')||12), cols = +(q.get('cols')||4), fps = +(q.get('fps')||30);
+document.getElementById('sheet').style.width = (cols*1280)+'px';
+const tpl = document.getElementById('tpl').content;
+for (let i=0;i<count;i++){
+  const cell = document.createElement('div');
+  cell.className='cell';
+  cell.appendChild(tpl.cloneNode(true));
+  const t = (from+i)/fps;
+  cell.querySelectorAll('*').forEach(el=>{ el.style.animationDelay = (-t)+'s'; });
+  document.getElementById('sheet').appendChild(cell);
+}
+document.title='ready';
+</script>

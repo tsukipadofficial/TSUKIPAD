@@ -1,0 +1,22 @@
+node_modules/
+.env
+.env.local
+.DS_Store
+
+# contracts
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/tools/node_modules/
+
+# web
+web/.next/
+web/out/
+web/next-env.d.ts
+web/*.tsbuildinfo
+.secrets/
+
+# assistant scratch
+CLAUDE.md
+AGENTS.md
+.claude/

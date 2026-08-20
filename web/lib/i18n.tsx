@@ -1,0 +1,397 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+
+import { STORAGE_PREFIX } from "./brand";
+
+export type Lang = "en" | "ja";
+
+/// Every user-facing string in the app.
+///
+/// Kept as one flat typed object rather than JSON files so that a missing or
+/// misspelled key is a TypeScript error rather than a blank space at runtime.
+/// Values may contain `{name}` placeholders, filled by the second argument to `t`.
+const STRINGS = {
+  // --- chrome ---------------------------------------------------------
+  "nav.board": { en: "Board", ja: "ボード" },
+  "nav.launch": { en: "Launch", ja: "発行" },
+  "nav.connect": { en: "Connect", ja: "接続" },
+  "nav.connecting": { en: "Connecting…", ja: "接続中…" },
+  "nav.switchToArc": { en: "Switch to Arc", ja: "Arcに切替" },
+  "nav.explorer": { en: "Explorer", ja: "エクスプローラ" },
+
+  "footer.chain": { en: "Built on Arc Network · Arc Testnet · chain 5042002", ja: "Arc Network上に構築 · Arcテストネット · チェーン 5042002" },
+  /// Required by the Arc Brand Guidelines and Partner Toolkit. Kept in English
+  /// in both locales because it is a legal attribution, not UI copy.
+  "footer.trademark": {
+    en: "Arc is a trademark of Circle Internet Group, Inc. This project is not affiliated with or endorsed by Circle.",
+    ja: "Arc は Circle Internet Group, Inc. の商標です。本プロジェクトは Circle と提携しておらず、承認も受けていません。",
+  },
+  "footer.independent": {
+    en: "An independent project. Not built, operated or reviewed by Circle.",
+    ja: "独立したプロジェクトです。Circle による開発・運営・審査は受けていません。",
+  },
+  "footer.disclaimer": {
+    en: "Testnet only. Tokens launched here have no value. Liquidity is locked permanently by contract — but that is not a substitute for your own research.",
+    ja: "テストネット専用です。ここで発行されるトークンに価値はありません。流動性はコントラクトにより恒久的にロックされますが、ご自身での調査に代わるものではありません。",
+  },
+
+  // --- hero -----------------------------------------------------------
+  "hero.badge.testnet": { en: "Arc Testnet", ja: "Arcテストネット" },
+  "hero.title.1": { en: "Launch at", ja: "時価総額" },
+  "hero.title.2": { en: "Tradeable", ja: "どこでも" },
+  "hero.title.3": { en: "everywhere", ja: "即座に取引" },
+  "hero.title.4": { en: "instantly.", ja: "から発行。" },
+  "hero.body": {
+    en: "Your token opens as a real Uniswap V3 pool paired with USDC — not a bonding curve that has to graduate later. Liquidity is seeded with single-sided supply, so you launch",
+    ja: "トークンはUSDCとペアになった本物のUniswap V3プールとして開始します。後から移行が必要なボンディングカーブではありません。片側供給で流動性を供給するため、",
+  },
+  "hero.body.bold": { en: "without putting up a cent", ja: "自己資金ゼロで発行でき" },
+  "hero.body.end": { en: ", and it is locked forever by contract.", ja: "、流動性はコントラクトにより恒久的にロックされます。" },
+  "hero.cta": { en: "Launch a token →", ja: "トークンを発行 →" },
+
+  "how.title": { en: "How it works", ja: "仕組み" },
+  "how.1.t": { en: "Deploy", ja: "デプロイ" },
+  "how.1.b": { en: "Fixed supply, no mint, no owner, no tax.", ja: "固定供給。ミント機能・オーナー権限・税なし。" },
+  "how.2.t": { en: "Open pool", ja: "プール開設" },
+  "how.2.b": { en: "A USDC pool opens at your chosen $3K market cap.", ja: "指定した時価総額（例：$3,000）でUSDCプールが開きます。" },
+  "how.3.t": { en: "Seed", ja: "供給" },
+  "how.3.b": { en: "100% of supply becomes single-sided liquidity. You pay nothing.", ja: "供給量の100%が片側流動性になります。費用はかかりません。" },
+  "how.4.t": { en: "Trade", ja: "取引" },
+  "how.4.b": { en: "Live on Uniswap from block one. No graduation step.", ja: "最初のブロックからUniswapで取引可能。移行作業は不要です。" },
+
+  "stats.launches": { en: "Launches", ja: "発行数" },
+  "stats.combinedCap": { en: "Combined cap", ja: "合計時価総額" },
+
+  // --- board ----------------------------------------------------------
+  "board.sort.new": { en: "Fresh", ja: "新着" },
+  "board.sort.mcap": { en: "Top cap", ja: "時価総額順" },
+  "board.sort.climbing": { en: "Climbing", ja: "上昇率順" },
+  "board.search": { en: "Search name, ticker or address…", ja: "名称・ティッカー・アドレスで検索…" },
+  "board.empty.title": { en: "No launches yet.", ja: "まだ発行がありません。" },
+  "board.empty.body": { en: "The board is empty. Be the first token on Arc.", ja: "ボードは空です。Arc最初のトークンを発行しましょう。" },
+  "board.empty.cta": { en: "Launch the first one →", ja: "最初の一つを発行 →" },
+  "board.noMatch.title": { en: "Nothing matches that.", ja: "該当するものがありません。" },
+  "board.noMatch.body": { en: "Try a different ticker or address.", ja: "別のティッカーやアドレスをお試しください。" },
+  "board.error.title": { en: "Could not reach the launchpad.", ja: "ローンチパッドに接続できませんでした。" },
+  "board.error.body": {
+    en: "Check that the RPC is reachable and the contract address is correct.",
+    ja: "RPCへの接続とコントラクトアドレスをご確認ください。",
+  },
+
+  // --- launch card ----------------------------------------------------
+  "card.new": { en: "new", ja: "新着" },
+  "card.soldOut": { en: "sold out", ja: "完売" },
+  "card.earns": { en: "earns", ja: "報酬" },
+  "card.funds": { en: "funds", ja: "寄付" },
+  "card.supplySold": { en: "{pct} of supply sold", ja: "供給の{pct}が売却済" },
+  "card.by": { en: "by {addr}", ja: "発行者 {addr}" },
+  "card.ceiling": { en: "{amount} ceiling", ja: "上限 {amount}" },
+
+  // --- create form ----------------------------------------------------
+  "create.title": { en: "Launch a token", ja: "トークンを発行" },
+  "create.subtitle": {
+    en: "Fixed supply, no mint function, no owner keys. Your entire supply becomes single-sided Uniswap liquidity — you provide",
+    ja: "固定供給、ミント機能なし、オーナー権限なし。供給量の全てがUniswapの片側流動性になります。",
+  },
+  "create.subtitle.bold": { en: "no USDC at all", ja: "USDCの拠出は一切不要" },
+  "create.subtitle.end": { en: "— and that liquidity can never be withdrawn.", ja: "で、その流動性は引き出すことができません。" },
+
+  "field.name": { en: "Name", ja: "名称" },
+  "field.name.hint": { en: "2–32 characters", ja: "2〜32文字" },
+  "field.ticker": { en: "Ticker", ja: "ティッカー" },
+  "field.ticker.hint": { en: "A–Z and 0–9, 2–10 characters", ja: "英数字（A〜Z、0〜9）2〜10文字" },
+  "field.description": { en: "Description", ja: "説明" },
+  "field.description.ph": { en: "What is this?", ja: "どんなトークンですか？" },
+  "field.picture": { en: "Picture", ja: "画像" },
+  "field.optional": { en: "optional", ja: "任意" },
+  "field.telegram": { en: "Telegram", ja: "Telegram" },
+
+  "image.choose": { en: "Choose an image", ja: "画像を選択" },
+  "image.processing": { en: "Processing…", ja: "処理中…" },
+  "image.drop": { en: "or drop it here · resized to 128px, kept fully on-chain", ja: "またはドラッグ＆ドロップ · 128pxに縮小し、完全オンチェーンで保存" },
+  "image.stored": { en: "Stored on-chain", ja: "オンチェーンに保存" },
+  "image.remove": { en: "Remove", ja: "削除" },
+  "image.nearLimit": {
+    en: "This image is near the size limit. A simpler picture would cost less gas.",
+    ja: "画像サイズが上限に近づいています。よりシンプルな画像の方がガス代を抑えられます。",
+  },
+
+  "field.openingMcap": { en: "Opening market cap", ja: "開始時価総額" },
+  "field.openingMcap.hint": { en: "Where trading starts. Nobody can buy in lower.", ja: "取引開始価格です。これより安く購入することはできません。" },
+  "field.ceiling": { en: "Ceiling", ja: "上限価格" },
+  "field.ceiling.hint": { en: "Top of the liquidity range. Above this, no supply is left to buy.", ja: "流動性レンジの上限です。これを超えると購入できる供給がなくなります。" },
+
+  "field.fees": { en: "Who earns the swap fees", ja: "取引手数料の受取先" },
+  "fees.creator.t": { en: "You keep them", ja: "自分が受け取る" },
+  "fees.creator.b": { en: "Fees accrue to you as USDC and tokens, claimable any time.", ja: "USDCとトークンで手数料が蓄積され、いつでも請求できます。" },
+  "fees.holders.t": { en: "Holders earn", ja: "保有者に分配" },
+  "fees.holders.b": { en: "Fees become USDC that every holder claims pro-rata. Cashable.", ja: "手数料はUSDCとなり、保有量に応じて全保有者が請求できます。換金可能です。" },
+  "fees.redirect.t": { en: "Send them to a project", ja: "プロジェクトに寄付" },
+  "fees.redirect.b": { en: "Fund a dev, a repo or a cause. You earn nothing from this launch.", ja: "開発者やリポジトリ、活動を支援します。発行者の収益はゼロになります。" },
+  "fees.burn.t": { en: "Buy back and burn", ja: "買い戻して焼却" },
+  "fees.burn.b": {
+    en: "Fees buy the token off its own pool and destroy it. Supply shrinks forever.",
+    ja: "手数料でプールからトークンを買い戻し、焼却します。供給量は永久に減少します。",
+  },
+  "fees.burn.note": { en: "Every trade permanently shrinks the supply.", ja: "全ての取引が供給量を永久に減らします。" },
+  "preview.badge.burn": { en: "deflationary", ja: "デフレ型" },
+  "preview.badge.burn.b": {
+    en: "Trading fees buy the token back and burn it, so supply only ever falls.",
+    ja: "取引手数料でトークンを買い戻して焼却するため、供給量は減る一方です。",
+  },
+  "burn.title": { en: "Buy back & burn", ja: "買い戻し・焼却" },
+  "burn.body": {
+    en: "This launch spends its fee share buying {sym} off the market and destroying it. Supply only ever falls.",
+    ja: "このトークンは手数料で{sym}を市場から買い戻し、焼却します。供給量は減る一方です。",
+  },
+  "burn.spent": { en: "Spent buying back", ja: "買い戻し総額" },
+  "burn.burned": { en: "Supply destroyed", ja: "焼却済供給量" },
+  "burn.ofSupply": { en: "{pct} of the original supply is gone", ja: "当初供給量の{pct}が焼却済" },
+  "token.deflationary": { en: "deflationary", ja: "デフレ型" },
+  "card.burns": { en: "burns", ja: "焼却" },
+  "facts.fees.burn": { en: "Buy the token back and burn it", ja: "買い戻して焼却" },
+  "fees.immutable": { en: "This cannot be changed after launch.", ja: "発行後は変更できません。" },
+  "fees.holders.note": { en: "Holding the token pays real USDC.", ja: "トークンを保有するだけで実際のUSDCが得られます。" },
+
+  "field.recipient": { en: "Recipient wallet", ja: "受取ウォレット" },
+  "field.recipient.hint": { en: "Where the fees are actually sent.", ja: "手数料が実際に送られる先です。" },
+  "field.funds": { en: "Who it funds", ja: "支援先" },
+  "field.funds.hint": { en: "An X handle, a GitHub repo, or a link. Shown on the token page.", ja: "Xのハンドル、GitHubリポジトリ、またはリンク。トークンページに表示されます。" },
+  "field.funds.warning": {
+    en: "Nobody can prove a social account owns a wallet, so this label is only a claim. The recipient address is always displayed next to it.",
+    ja: "SNSアカウントとウォレットの所有関係は証明できないため、この表記はあくまで自己申告です。受取アドレスは常に併記されます。",
+  },
+
+  "field.allocation": { en: "Creator allocation — {pct}%", ja: "発行者の取り分 — {pct}%" },
+  "field.allocation.none": { en: "Nothing withheld. The purest fair launch.", ja: "留保なし。最も公平な発行方式です。" },
+  "field.allocation.some": {
+    en: "You keep {amount}M tokens — locked for 30 minutes after launch so you cannot dump on early buyers. Buyers can see this.",
+    ja: "{amount}Mトークンを留保します。初期購入者への売り抜けを防ぐため、発行後30分間ロックされます。購入者からも確認できます。",
+  },
+
+  "preview.title": { en: "Launch preview", ja: "プレビュー" },
+  "preview.opensAt": { en: "Opens at", ja: "開始時価総額" },
+  "preview.ceiling": { en: "Ceiling", ja: "上限" },
+  "preview.openingPrice": { en: "Opening price", ja: "開始価格" },
+  "preview.fillsCurve": { en: "Fills curve", ja: "完売までの購入額" },
+  "preview.fillsCurve.sub": { en: "buying to sell out", ja: "全供給の売却に必要な額" },
+  "preview.supply": { en: "{n} supply", ja: "供給量 {n}" },
+  "preview.explain": {
+    en: "Roughly {amount} of net buying takes this from {start} to its ceiling, at which point every token has been sold. The ceiling mainly sets how much headroom the token has — it barely changes the early price action, so pick it for ambition, not for speed.",
+    ja: "およそ{amount}の純購入で{start}から上限に到達し、その時点で全トークンが売却されます。上限は主に伸びしろを決めるもので、初期の値動きにはほとんど影響しません。速度ではなく目標の高さで選んでください。",
+  },
+  "preview.badge.creator": { en: "creator fees", ja: "発行者が受取" },
+  "preview.badge.holders": { en: "holder rewards", ja: "保有者に分配" },
+  "preview.badge.funds": { en: "funds a project", ja: "プロジェクトに寄付" },
+  "preview.badge.creator.b": { en: "You collect the creator share of every trade.", ja: "全ての取引の発行者分を受け取ります。" },
+  "preview.badge.holders.b": { en: "Every buyer earns claimable USDC just for holding, funded by trading fees.", ja: "取引手数料を原資に、保有するだけでUSDCを獲得できます。" },
+  "preview.badge.funds.b": { en: "Every trade funds {target}. You earn nothing.", ja: "全ての取引が{target}を支援します。発行者の収益はありません。" },
+  "preview.badge.funds.fallback": { en: "the nominated wallet", ja: "指定されたウォレット" },
+
+  "cost.title": { en: "Your cost to launch", ja: "発行にかかる費用" },
+  "cost.gas": { en: "+ gas", ja: "＋ガス代" },
+  "cost.body": {
+    en: "Single-sided liquidity means the pool is seeded entirely with your token. Gas is paid in USDC, since that is Arc's native gas asset.",
+    ja: "片側流動性のため、プールはあなたのトークンのみで構成されます。ArcのネイティブガスはUSDCなので、ガス代もUSDCで支払います。",
+  },
+
+  "cta.launch": { en: "Launch it →", ja: "発行する →" },
+  "cta.notDeployed": { en: "Contracts not deployed", ja: "コントラクト未デプロイ" },
+  "cta.connect": { en: "Connect a wallet", ja: "ウォレットを接続" },
+  "cta.switchNetwork": { en: "Switch to Arc Testnet", ja: "Arcテストネットに切替" },
+  "cta.working": { en: "Working…", ja: "処理中…" },
+
+  "status.hashing": { en: "Computing deployment hash…", ja: "デプロイハッシュを計算中…" },
+  "status.mining": { en: "Mining a token address below USDC…", ja: "USDCより小さいアドレスを探索中…" },
+  "status.found": { en: "Found {addr}… in {n} attempts. Confirm in your wallet.", ja: "{n}回で{addr}…を発見しました。ウォレットで承認してください。" },
+  "status.launching": { en: "Launching…", ja: "発行中…" },
+  "err.nameLength": { en: "Name must be 2–32 characters.", ja: "名称は2〜32文字で入力してください。" },
+  "err.ticker": { en: "Ticker must be 2–10 characters, letters and digits only.", ja: "ティッカーは英数字2〜10文字で入力してください。" },
+
+  // --- token page -----------------------------------------------------
+  "token.liquidityLocked": { en: "liquidity locked", ja: "流動性ロック済" },
+  "token.holdersEarn": { en: "holders earn USDC", ja: "保有者がUSDCを獲得" },
+  "token.feesFund": { en: "fees fund a project", ja: "手数料をプロジェクトへ" },
+  "token.creatorLocked": { en: "creator locked", ja: "発行者分ロック中" },
+  "token.launchedAgo": { en: "launched {t}", ja: "{t}に発行" },
+  "token.fromLaunch": { en: "{n}× from launch", ja: "発行時比 {n}倍" },
+  "curve.start": { en: "{amount} start", ja: "開始 {amount}" },
+  "curve.toFill": { en: "{amount} to fill", ja: "完売まで {amount}" },
+  "curve.ceiling": { en: "{amount} ceiling", ja: "上限 {amount}" },
+  "token.priceCurve": { en: "Price curve", ja: "価格カーブ" },
+  "token.supplySold": { en: "{pct} of supply sold", ja: "供給の{pct}が売却済" },
+  "token.price": { en: "Price", ja: "価格" },
+  "token.marketCap": { en: "Market cap", ja: "時価総額" },
+  "token.leftToFill": { en: "Left to fill", ja: "完売までの残り" },
+  "token.ceiling": { en: "Ceiling", ja: "上限" },
+  "token.curveExplain": {
+    en: "{pct} of the supply is already sold, yet {amount} of buying is still needed to reach the ceiling. Those numbers differ because liquidity is concentrated: the early supply sells cheaply, and most of the dollars arrive near the top of the range.",
+    ja: "供給の{pct}が既に売却済ですが、上限到達にはさらに{amount}の購入が必要です。流動性が集中しているためで、初期の供給は安価に売れ、大半の資金はレンジ上部で入ります。",
+  },
+  "token.liveTrades": { en: "Live trades", ja: "取引履歴" },
+  "token.tradesLoading": { en: "Loading recent trades…", ja: "取引履歴を読込中…" },
+  "token.noTrades": { en: "No trades yet. Be the first.", ja: "まだ取引がありません。最初の取引者になりましょう。" },
+  "token.buy": { en: "BUY", ja: "買い" },
+  "token.sell": { en: "SELL", ja: "売り" },
+  "token.notFound": { en: "Not a launch from this pad.", ja: "このローンチパッド発行のトークンではありません。" },
+  "token.notFound.body": { en: "{addr} was not created here.", ja: "{addr}はここで発行されていません。" },
+  "token.back": { en: "Back to the board", ja: "ボードに戻る" },
+  "token.notConfigured": { en: "Contracts are not configured yet.", ja: "コントラクトが未設定です。" },
+
+  "facts.title": { en: "Contract facts", ja: "コントラクト情報" },
+  "facts.supply": { en: "Supply", ja: "供給量" },
+  "facts.mint": { en: "Mint function", ja: "ミント機能" },
+  "facts.mint.v": { en: "None — supply is fixed forever", ja: "なし — 供給量は永久に固定" },
+  "facts.owner": { en: "Owner keys", ja: "オーナー権限" },
+  "facts.owner.v": { en: "None — the token has no admin", ja: "なし — 管理者は存在しません" },
+  "facts.tax": { en: "Transfer tax", ja: "送金税" },
+  "facts.tax.v": { en: "None", ja: "なし" },
+  "facts.liquidity": { en: "Liquidity", ja: "流動性" },
+  "facts.liquidity.v": { en: "Locked permanently; no withdrawal path exists", ja: "恒久的にロック。引き出し手段は存在しません" },
+  "facts.creator": { en: "Creator", ja: "発行者" },
+  "facts.metadata": { en: "Metadata", ja: "メタデータ" },
+  "facts.metadata.img": { en: "Fully on-chain, image included", ja: "画像を含め完全オンチェーン" },
+  "facts.metadata.plain": { en: "Stored on-chain", ja: "オンチェーンに保存" },
+  "facts.fees": { en: "Swap fees", ja: "取引手数料" },
+  "facts.fees.holders": { en: "Shared with holders as claimable USDC", ja: "USDCとして保有者に分配" },
+  "facts.fees.creator": { en: "Collected by the creator", ja: "発行者が受領" },
+  "facts.fees.redirect": { en: "Sent to {addr}", ja: "{addr}へ送金" },
+
+  "rug.title": { en: "Why this can't rug", ja: "ラグプルできない理由" },
+  "rug.body": {
+    en: "The pool's liquidity position is owned by the launchpad contract, which exposes no function that burns it. Fees can be claimed; principal cannot be moved — not by the creator, not by the launchpad owner, not by anyone.",
+    ja: "プールの流動性ポジションはローンチパッドのコントラクトが保有し、これを焼却する関数は存在しません。手数料は請求できますが元本は移動できません。発行者もローンチパッド運営者も、誰も動かせません。",
+  },
+
+  // --- trade panel ----------------------------------------------------
+  "trade.youPay": { en: "You pay", ja: "支払い" },
+  "trade.youReceive": { en: "You receive", ja: "受取" },
+  "trade.balance": { en: "balance {n} {sym}", ja: "残高 {n} {sym}" },
+  "trade.priceImpact": { en: "Price impact", ja: "価格影響" },
+  "trade.slippage": { en: "Max slippage", ja: "最大スリッページ" },
+  "trade.approve": { en: "Approve {sym}", ja: "{sym}を承認" },
+  "trade.approving": { en: "Approving…", ja: "承認中…" },
+  "trade.confirming": { en: "Confirming…", ja: "確認中…" },
+  "trade.checkWallet": { en: "Check wallet…", ja: "ウォレットを確認…" },
+  "trade.buySym": { en: "Buy {sym}", ja: "{sym}を買う" },
+  "trade.sellSym": { en: "Sell {sym}", ja: "{sym}を売る" },
+  "trade.wrongNetwork": { en: "Wrong network", ja: "ネットワークが違います" },
+  "trade.quoteUnavailable": { en: "Quote unavailable — check balance and approval.", ja: "見積もりを取得できません。残高と承認をご確認ください。" },
+  "trade.soldOut": {
+    en: "The curve is fully bought out — there is no supply left in the range. You can still sell into it.",
+    ja: "カーブは完売しました。レンジ内に供給は残っていません。売却は引き続き可能です。",
+  },
+
+  // --- rewards --------------------------------------------------------
+  "rewards.title": { en: "Holder rewards", ja: "保有者報酬" },
+  "rewards.body": {
+    en: "This launch shares its trading fees. Hold {sym} and you earn real USDC — claimable any time, no staking, no lock-up.",
+    ja: "このトークンは取引手数料を分配します。{sym}を保有するだけで実際のUSDCを獲得でき、ステーキングやロックなしでいつでも請求できます。",
+  },
+  "rewards.canClaim": { en: "You can claim", ja: "請求可能額" },
+  "rewards.paidOut": { en: "Paid to holders", ja: "保有者への分配総額" },
+  "rewards.claimed": { en: "Claimed {amount} USDC.", ja: "{amount} USDCを請求しました。" },
+  "rewards.claim": { en: "Claim {amount}", ja: "{amount}を請求" },
+  "rewards.nothingYet": { en: "Nothing to claim yet", ja: "請求できる報酬はまだありません" },
+  "rewards.buyToEarn": { en: "Buy {sym} to start earning", ja: "{sym}を購入して報酬を獲得" },
+  "rewards.sweep": { en: "Sweep new fees from the pool into rewards", ja: "プールの手数料を報酬に反映する" },
+
+  // --- creator lock ---------------------------------------------------
+  "lock.title": { en: "Creator allocation", ja: "発行者の取り分" },
+  "lock.locked": { en: "locked", ja: "ロック中" },
+  "lock.released": { en: "released", ja: "解除済" },
+  "lock.unlocked": { en: "unlocked", ja: "解除可能" },
+  "lock.ofSupply": { en: "of supply · {n} {sym}", ja: "／全供給 · {n} {sym}" },
+  "lock.body": {
+    en: "Held by the launchpad contract until then. The creator cannot sell any of it, so early buyers cannot be dumped on.",
+    ja: "それまでローンチパッドのコントラクトが保管します。発行者は一切売却できないため、初期購入者が売り抜けの被害を受けることはありません。",
+  },
+  "lock.releasedBody": {
+    en: "Released to {addr} after the 30-minute lock. It trades like any other holding now.",
+    ja: "30分のロック後に{addr}へ解除されました。現在は通常の保有分と同様に取引できます。",
+  },
+  "lock.expiredBody": { en: "The lock has expired. The allocation can be released to the creator.", ja: "ロックが解除されました。発行者へ配分できます。" },
+  "lock.claim": { en: "Claim your allocation", ja: "取り分を受け取る" },
+  "lock.release": { en: "Release to creator", ja: "発行者へ配分する" },
+  "lock.releasing": { en: "Releasing…", ja: "配分中…" },
+
+  // --- fee redirect ---------------------------------------------------
+  "redirect.title": { en: "Where the fees go", ja: "手数料の送金先" },
+  "redirect.body": { en: "The creator takes nothing from this launch. Trading fees are sent to:", ja: "発行者はこのトークンから収益を得ません。取引手数料は次の宛先に送られます：" },
+  "redirect.claimed": {
+    en: "Claimed to fund {target}. Nobody can prove a social account owns a wallet — verify the address yourself before trusting the claim.",
+    ja: "{target}への支援を表明しています。SNSアカウントとウォレットの所有関係は証明できないため、アドレスをご自身でご確認ください。",
+  },
+} as const;
+
+export type StringKey = keyof typeof STRINGS;
+
+type Ctx = {
+  lang: Lang;
+  setLang: (l: Lang) => void;
+  t: (key: StringKey, vars?: Record<string, string | number>) => string;
+};
+
+const I18nContext = createContext<Ctx | null>(null);
+
+const STORAGE_KEY = `${STORAGE_PREFIX}.lang`;
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  // Always start at "en" so the server and first client render agree; the stored
+  // or browser-detected preference is applied in an effect straight after.
+  const [lang, setLangState] = useState<Lang>("en");
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored === "en" || stored === "ja") {
+      setLangState(stored);
+      return;
+    }
+    if (navigator.language?.toLowerCase().startsWith("ja")) setLangState("ja");
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
+  const setLang = useCallback((l: Lang) => {
+    setLangState(l);
+    window.localStorage.setItem(STORAGE_KEY, l);
+  }, []);
+
+  const t = useCallback(
+    (key: StringKey, vars?: Record<string, string | number>) => {
+      let out: string = STRINGS[key][lang];
+      if (vars) {
+        for (const [k, v] of Object.entries(vars)) {
+          out = out.replaceAll(`{${k}}`, String(v));
+        }
+      }
+      return out;
+    },
+    [lang],
+  );
+
+  const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+export function useI18n(): Ctx {
+  const ctx = useContext(I18nContext);
+  if (!ctx) throw new Error("useI18n must be used inside I18nProvider");
+  return ctx;
+}
+
+/// Shorthand for components that only need the translate function.
+export function useT() {
+  return useI18n().t;
+}

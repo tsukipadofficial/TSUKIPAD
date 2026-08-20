@@ -1,0 +1,26 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.26"
+optimizer = true
+# ArcLaunchpad embeds LaunchToken's full initcode (it deploys tokens with CREATE2),
+# which puts it close to the 24,576-byte EIP-170 limit. 1,000,000 runs pushed it to
+# 24,999 and the deploy failed outright; 20,000 lands at ~22,050 with runtime gas
+# essentially unchanged. Do not raise this without checking `forge build --sizes`.
+optimizer_runs = 20_000
+via_ir = true
+evm_version = "cancun"
+bytecode_hash = "none"
+fs_permissions = [{ access = "read", path = "./tools/node_modules/@uniswap" }, { access = "read", path = "./src" }, { access = "read-write", path = "./deployments" }]
+
+remappings = [
+    "@openzeppelin/=lib/openzeppelin-contracts/",
+    "forge-std/=lib/forge-std/src/",
+]
+
+[rpc_endpoints]
+arc_testnet = "https://rpc.testnet.arc.io"
+
+[etherscan]
+arc_testnet = { key = "${ARCSCAN_API_KEY}", url = "https://testnet.arcscan.app/api" }

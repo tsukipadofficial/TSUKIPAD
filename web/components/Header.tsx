@@ -1,0 +1,126 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useAccount, useConnect, useDisconnect, useReadContract, useSwitchChain } from "wagmi";
+
+import { Button, cx, LiveDot } from "./ui";
+import { Logo } from "./Logo";
+import { NAME_HEAD, NAME_TAIL } from "@/lib/brand";
+import { erc20Abi } from "@/lib/abi";
+import { USDC_ADDRESS, USDC_DECIMALS, chain, FAUCET_URL } from "@/lib/config";
+import { formatUnitsFloat, shortAddress } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
+
+const NAV = [
+  { href: "/", key: "nav.board" as const },
+  { href: "/create", key: "nav.launch" as const },
+];
+
+export function Header() {
+  const pathname = usePathname();
+  const { t, lang, setLang } = useI18n();
+  const { address, isConnected, chainId } = useAccount();
+  const { connect, connectors, isPending } = useConnect();
+  const { disconnect } = useDisconnect();
+  const { switchChain } = useSwitchChain();
+
+  const wrongNetwork = isConnected && chainId !== chain.id;
+
+  const { data: usdcBalance } = useReadContract({
+    address: USDC_ADDRESS,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address && !wrongNetwork, refetchInterval: 15_000 },
+  });
+
+  const injectedConnector = connectors.find((c) => c.id === "injected") ?? connectors[0];
+
+  return (
+    <header className="sticky top-0 z-50 border-b-2 border-line bg-void/85 backdrop-blur">
+      <div className="mx-auto flex max-w-7xl items-center gap-4 px-5 py-3">
+        <Link href="/" className="group shrink-0">
+          <Logo name={NAME_HEAD} accent={NAME_TAIL} size={34} />
+        </Link>
+
+        <nav className="ml-4 hidden items-center gap-1 sm:flex">
+          {NAV.map((item) => {
+            const active = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cx(
+                  "border-2 px-3 py-1.5 text-sm font-bold uppercase tracking-wide transition-colors",
+                  active
+                    ? "border-lime bg-lime text-void"
+                    : "border-transparent text-muted hover:border-line hover:text-ink",
+                )}
+              >
+                {t(item.key)}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="ml-auto flex items-center gap-2.5">
+          {/* Language switch. Labels stay in their own language so a Japanese
+              reader can find 日本語 without reading English first. */}
+          <div className="flex border-2 border-line">
+            {(["en", "ja"] as const).map((l) => (
+              <button
+                key={l}
+                onClick={() => setLang(l)}
+                className={cx(
+                  "px-2 py-1 text-xs font-bold transition-colors",
+                  lang === l ? "bg-lime text-void" : "text-muted hover:text-ink",
+                )}
+                aria-label={l === "en" ? "English" : "日本語"}
+                aria-pressed={lang === l}
+              >
+                {l === "en" ? "EN" : "日本語"}
+              </button>
+            ))}
+          </div>
+
+          {isConnected && !wrongNetwork ? (
+            <a
+              href={FAUCET_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="hidden items-center gap-1.5 border-2 border-line px-3 py-1.5 text-sm transition-colors hover:border-cyan md:inline-flex"
+              title="Get testnet USDC from the Circle faucet"
+            >
+              <LiveDot />
+              <span className="tabular font-bold">
+                {usdcBalance !== undefined
+                  ? `${formatUnitsFloat(usdcBalance as bigint, USDC_DECIMALS).toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+                  : "—"}
+              </span>
+              <span className="text-xs text-faint">USDC</span>
+            </a>
+          ) : null}
+
+          {wrongNetwork ? (
+            <Button variant="pink" size="sm" onClick={() => switchChain({ chainId: chain.id })}>
+              {t("nav.switchToArc")}
+            </Button>
+          ) : isConnected ? (
+            <Button variant="ghost" size="sm" onClick={() => disconnect()}>
+              <span className="tabular">{shortAddress(address!)}</span>
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              disabled={isPending || !injectedConnector}
+              onClick={() => injectedConnector && connect({ connector: injectedConnector })}
+            >
+              {isPending ? t("nav.connecting") : t("nav.connect")}
+            </Button>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}

@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design tokens
+
+   Dark neo-brutalism: a near-black ground, hard 2px rules, offset shadows with
+   no blur, and one loud acid accent. Colour is used sparingly so the numbers —
+   which are the actual content of a launchpad — stay the brightest thing on
+   screen.
+--------------------------------------------------------------------------- */
+
+@theme {
+  --color-void: #08080a;
+  --color-surface: #121216;
+  --color-surface-2: #1a1a20;
+  --color-line: #2c2c35;
+  --color-line-bright: #43434f;
+
+  --color-lime: #c8ff2e;
+  --color-lime-dim: #93bf1f;
+  --color-pink: #ff3d8b;
+  --color-cyan: #29e5f5;
+  --color-amber: #ffb020;
+
+  --color-ink: #f4f4f0;
+  --color-muted: #8c8c99;
+  --color-faint: #5b5b68;
+
+  --font-display: var(--font-space-grotesk), 'Noto Sans JP', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'Noto Sans JP', ui-monospace, monospace;
+
+  --animate-marquee: marquee 40s linear infinite;
+  --animate-pulse-dot: pulse-dot 1.6s ease-in-out infinite;
+  --animate-rise: rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.82); }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+html {
+  color-scheme: dark;
+  scrollbar-color: var(--color-line-bright) var(--color-void);
+}
+
+body {
+  background-color: var(--color-void);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  /* Faint diagonal grain so the flat black reads as a surface, not a void. */
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.012) 0px,
+      rgba(255, 255, 255, 0.012) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+}
+
+/* ---------------------------------------------------------------------------
+   Primitives
+--------------------------------------------------------------------------- */
+
+@utility brut {
+  border: 2px solid var(--color-line);
+  background-color: var(--color-surface);
+  box-shadow: 4px 4px 0 0 var(--color-line);
+}
+
+@utility brut-hover {
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+
+  &:hover {
+    border-color: var(--color-lime);
+    box-shadow: 6px 6px 0 0 var(--color-lime-dim);
+    transform: translate(-2px, -2px);
+  }
+}
+
+/* Chunky pressable button. The press state collapses the offset shadow so the
+   control physically sinks toward the page. */
+@utility btn-brut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 2px solid var(--color-void);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.15s ease;
+  box-shadow: 4px 4px 0 0 var(--color-void);
+
+  &:active:not(:disabled) {
+    transform: translate(4px, 4px);
+    box-shadow: 0 0 0 0 var(--color-void);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+@utility tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Labels: small, wide-tracked, quiet. */
+@utility eyebrow {
+  font-size: 0.6875rem;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+}
+
+@utility hairline {
+  border-bottom: 2px solid var(--color-line);
+}
+
+/* Focus ring that stays legible against the acid accent. */
+:focus-visible {
+  outline: 2px solid var(--color-cyan);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
