@@ -47,9 +47,11 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
         working-directory: web
-      - name: Typecheck
-        run: pnpm exec tsc --noEmit
-        working-directory: web
+      # next build generates app/page types (PageProps, LayoutProps) into
+      # .next/types, so it has to run before tsc sees the project.
       - name: Build
         run: pnpm build
+        working-directory: web
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
         working-directory: web
