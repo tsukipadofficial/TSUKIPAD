@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "TSUKIPAD",
+    "slug": "tsukipad",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "tsukipad",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#08080A",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.tsukipad.app",
+      "infoPlist": {
+        "UIViewControllerBasedStatusBarAppearance": false,
+        "LSApplicationQueriesSchemes": ["metamask", "rainbow", "trust", "rabby"]
+      }
+    },
+    "plugins": [
+      "expo-router",
+      ["expo-splash-screen", { "backgroundColor": "#08080A", "resizeMode": "contain", "imageWidth": 160 }],
+      "expo-font"
+    ],
+    "experiments": { "typedRoutes": true }
+  }
+}

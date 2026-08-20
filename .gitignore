@@ -20,3 +20,9 @@ web/*.tsbuildinfo
 CLAUDE.md
 AGENTS.md
 .claude/
+
+# mobile
+mobile/node_modules/
+mobile/ios/
+mobile/android/
+mobile/.expo/
