@@ -11,13 +11,15 @@ import {
   JetBrainsMono_700Bold,
 } from "@expo-google-fonts/jetbrains-mono";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
+import { Splash } from "../components/Splash";
 import { c } from "../lib/theme";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
+  const [introDone, setIntroDone] = useState(false);
   const [loaded] = useFonts({
     SpaceGrotesk_500Medium,
     SpaceGrotesk_700Bold,
@@ -35,6 +37,7 @@ export default function RootLayout() {
   return (
     <>
       <StatusBar style="light" />
+      {introDone ? null : <Splash onDone={() => setIntroDone(true)} />}
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: c.void },
