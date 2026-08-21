@@ -374,13 +374,9 @@ const STRINGS = {
   // --- waitlist share ---------------------------------------------------
   "wl.share": { en: "Spread the word", ja: "広めてください" },
   "wl.shareBody": {
-    en: "Post about the launch, then paste the link. We check who wrote it, so only your own post counts.",
-    ja: "ローンチについて投稿し、そのリンクを貼ってください。投稿者を確認するため、自分の投稿のみ有効です。",
+    en: "Posting is what actually gets a launch seen. Share where you landed and bring people with you.",
+    ja: "投稿こそがローンチを広めます。あなたの順位をシェアして、仲間を連れてきてください。",
   },
-  "wl.postUrl": { en: "https://x.com/you/status/…", ja: "https://x.com/you/status/…" },
-  "wl.verifyPost": { en: "Verify post", ja: "投稿を確認" },
-  "wl.verifying": { en: "Checking…", ja: "確認中…" },
-  "wl.posted": { en: "Post verified", ja: "投稿を確認しました" },
   "wl.errPostBadUrl": { en: "That is not an X post link.", ja: "Xの投稿リンクではありません。" },
   "wl.errPostNotFound": { en: "We could not find that post.", ja: "その投稿が見つかりません。" },
   "wl.errPostWrongAuthor": {
