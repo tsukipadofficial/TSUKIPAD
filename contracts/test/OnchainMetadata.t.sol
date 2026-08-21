@@ -63,7 +63,8 @@ contract OnchainMetadataTest is Test {
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
-                recipientCommitment: bytes32(0)
+                recipientCommitment: bytes32(0),
+                referrer: address(0)
             })
         );
         gasUsed = before - gasleft();
@@ -135,7 +136,8 @@ contract OnchainMetadataTest is Test {
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
-                recipientCommitment: bytes32(0)
+                recipientCommitment: bytes32(0),
+                referrer: address(0)
             })
         );
         gasUsed = before - gasleft();

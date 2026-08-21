@@ -87,7 +87,8 @@ contract SeedDemo is Script {
                 rewardHolders: d.rewardHolders,
                 feeRecipient: d.feeRecipient,
                 buybackAndBurn: false,
-                recipientCommitment: bytes32(0)
+                recipientCommitment: bytes32(0),
+                referrer: address(0)
             })
         );
 

@@ -151,6 +151,26 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     mapping(address => uint256) public escrowToken;
     mapping(address => uint256) public escrowUsdc;
 
+    /// @notice Who introduced a launch, and the rate they were promised.
+    /// @dev The rate is snapshotted per launch rather than read live. A single
+    ///      mutable global would let the owner promise a share and then set it
+    ///      to zero, which is a promise nobody should rely on. `address` and
+    ///      `uint16` share one slot.
+    struct Referral {
+        address referrer;
+        uint16 bps;
+    }
+
+    mapping(address => Referral) public referralOf;
+
+    /// @notice Referral share applied to *new* launches, in bps of swap fees.
+    /// @dev Paid entirely out of the protocol's share, never the creator's. A
+    ///      creator's half is identical whether or not they were referred --
+    ///      otherwise being introduced would cost them money.
+    uint16 public referralFeeBps;
+
+    uint16 public constant MAX_REFERRAL_FEE_BPS = 2_000; // 20%
+
     /// @dev Set only for the duration of a `pool.mint` call, to authenticate the callback.
     address private _mintingPool;
 
@@ -183,6 +203,8 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     event TreasuryUpdated(address treasury);
     event ProtocolFeeUpdated(uint16 bps);
     event LaunchFeeUpdated(uint256 fee);
+    event ReferralFeeUpdated(uint16 bps);
+    event ReferralPaid(address indexed token, address indexed referrer, uint256 usdcAmount);
     event AttestorUpdated(address attestor);
     event FeeRecipientClaimed(address indexed token, address indexed recipient, uint256 tokenAmount, uint256 usdcAmount);
     event UnclaimedFeesSwept(address indexed token, uint256 tokenAmount, uint256 usdcAmount);
@@ -210,6 +232,8 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     error AttestationExpired();
     error StillClaimable();
     error ZeroRecipient();
+    error SelfReferral();
+    error ReferralFeeTooHigh();
 
     constructor(address usdc_, address factory_, uint24 poolFee_, address treasury_, uint16 protocolFeeBps_)
         Ownable(msg.sender)
@@ -264,6 +288,10 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         ///      Publishing a hash rather than the handle keeps the earmark
         ///      verifiable after the fact without putting the handle on-chain.
         bytes32 recipientCommitment;
+        /// @dev Whoever introduced this launch, paid out of the protocol's share
+        ///      of swap fees at the rate in force right now. Zero for none.
+        ///      Immutable once launched, like everything else about fee routing.
+        address referrer;
     }
 
     /// @notice Deploy a token, open its USDC pool, and seed it with single-sided liquidity.
@@ -349,6 +377,13 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         _launchIndexPlusOne[token] = launches.length;
         if (params.recipientCommitment != bytes32(0)) {
             recipientCommitment[token] = params.recipientCommitment;
+        }
+        if (params.referrer != address(0) && referralFeeBps > 0) {
+            // Blocks only the laziest self-referral. A second wallet defeats it,
+            // and no on-chain check can tell two wallets apart -- this is priced
+            // in as leakage rather than pretended away.
+            if (params.referrer == msg.sender) revert SelfReferral();
+            referralOf[token] = Referral({referrer: params.referrer, bps: referralFeeBps});
         }
 
         // The allocation stays here until the lock expires. Only the rounding
@@ -456,6 +491,20 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         uint256 protocol1 = (uint256(owed1) * protocolFeeBps) / 10_000 + protocolUsdcFromToken;
         uint256 creator1 = (uint256(owed1) - (uint256(owed1) * protocolFeeBps) / 10_000) + creatorUsdcFromToken;
 
+        // A referral is a share of the whole USDC-side fee, taken entirely out of
+        // the protocol's half. The creator's half is untouched, so being
+        // introduced never costs a creator anything.
+        uint256 referral1;
+        Referral memory ref = referralOf[token];
+        if (ref.referrer != address(0) && ref.bps > 0) {
+            referral1 = ((uint256(owed1) + creatorUsdcFromToken + protocolUsdcFromToken) * ref.bps) / 10_000;
+            // The rate is bounded below protocolFeeBps at the point it is set, so
+            // this cannot normally bind; it is here because rounding and the
+            // buy-and-burn path can leave protocol1 smaller than the naive share.
+            if (referral1 > protocol1) referral1 = protocol1;
+            protocol1 -= referral1;
+        }
+
         // Anything the swap could not clear -- a pool out of range, or a balance
         // below MIN_FEE_SWAP -- is paid in kind rather than stranded. This is the
         // old behaviour, now only a fallback.
@@ -479,6 +528,20 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
                 IERC20(USDC).safeTransfer(l.feeRecipient, creator1);
             }
         }
+        // Pay the referrer before the treasury, and never let them block it. A
+        // referrer can be a contract, or a USDC-blacklisted address; a reverting
+        // transfer here would make fee collection impossible for that launch
+        // forever, and the creator would lose their fees over someone else's
+        // problem. On failure the share falls through to the treasury.
+        if (referral1 > 0) {
+            try IERC20(USDC).transfer(ref.referrer, referral1) returns (bool ok) {
+                if (ok) emit ReferralPaid(token, ref.referrer, referral1);
+                else protocol1 += referral1;
+            } catch {
+                protocol1 += referral1;
+            }
+        }
+
         if (protocol1 > 0) IERC20(USDC).safeTransfer(treasury, protocol1);
 
         emit FeesCollected(token, creator0, creator1, protocol0, protocol1);
@@ -762,6 +825,16 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         if (owedUsdc > 0) IERC20(USDC).safeTransfer(treasury, owedUsdc);
 
         emit UnclaimedFeesSwept(token, owedToken, owedUsdc);
+    }
+
+    /// @notice Set the referral share for future launches, in bps of swap fees.
+    /// @dev Bounded by the protocol's own share: the referral is carved out of
+    ///      it, so a higher rate would leave the treasury owing more than it
+    ///      takes. Existing launches keep the rate they were created with.
+    function setReferralFeeBps(uint16 bps) external onlyOwner {
+        if (bps > MAX_REFERRAL_FEE_BPS || bps > protocolFeeBps) revert ReferralFeeTooHigh();
+        referralFeeBps = bps;
+        emit ReferralFeeUpdated(bps);
     }
 
     /// @notice Set the address permitted to attest wallet ownership of an identity.

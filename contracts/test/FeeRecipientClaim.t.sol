@@ -88,7 +88,8 @@ contract FeeRecipientClaimTest is Test {
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
-                recipientCommitment: commitment
+                recipientCommitment: commitment,
+                referrer: address(0)
             })
         );
         token = LaunchToken(t);

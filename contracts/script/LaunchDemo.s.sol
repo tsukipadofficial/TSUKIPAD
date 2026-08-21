@@ -56,7 +56,8 @@ contract LaunchDemo is Script {
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
-                recipientCommitment: bytes32(0)
+                recipientCommitment: bytes32(0),
+                referrer: address(0)
             })
         );
 

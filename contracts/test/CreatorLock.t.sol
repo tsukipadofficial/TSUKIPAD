@@ -66,7 +66,8 @@ contract CreatorLockTest is Test {
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
-                recipientCommitment: bytes32(0)
+                recipientCommitment: bytes32(0),
+                referrer: address(0)
             })
         );
     }
@@ -212,7 +213,8 @@ contract CreatorLockTest is Test {
                 rewardHolders: true,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
-                recipientCommitment: bytes32(0)
+                recipientCommitment: bytes32(0),
+                referrer: address(0)
             })
         );
 

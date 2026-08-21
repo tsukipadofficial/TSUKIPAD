@@ -56,7 +56,8 @@ contract AttackTest is Test {
             name: "Vic", symbol: "VIC", metadataURI: "", totalSupply: SUPPLY, salt: salt,
             tickLower: TICK_LOWER, tickUpper: TICK_UPPER, creatorAllocationBps: 1_000,
             rewardHolders: rewards, feeRecipient: address(0), buybackAndBurn: false,
-                recipientCommitment: bytes32(0)
+                recipientCommitment: bytes32(0),
+                referrer: address(0)
         }));
         t = LaunchToken(a);
     }

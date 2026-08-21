@@ -71,7 +71,8 @@ contract FeeRecipientTest is Test {
                 rewardHolders: rewardHolders,
                 feeRecipient: feeRecipient,
                 buybackAndBurn: false,
-                recipientCommitment: bytes32(0)
+                recipientCommitment: bytes32(0),
+                referrer: address(0)
             })
         );
         token = LaunchToken(t);
@@ -231,7 +232,8 @@ contract FeeRecipientTest is Test {
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
-                recipientCommitment: bytes32(0)
+                recipientCommitment: bytes32(0),
+                referrer: address(0)
             })
         );
 

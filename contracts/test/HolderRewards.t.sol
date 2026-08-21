@@ -80,7 +80,8 @@ contract HolderRewardsTest is Test {
                 rewardHolders: rewardHolders,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
-                recipientCommitment: bytes32(0)
+                recipientCommitment: bytes32(0),
+                referrer: address(0)
             })
         );
         token = LaunchToken(t);
