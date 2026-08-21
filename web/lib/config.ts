@@ -48,6 +48,11 @@ export const WALLETCONNECT_PROJECT_ID =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ??
   "df953ee3175df1a5b40eb420d24a34c0";
 
+/// Where the app is served from, for links people share. Falls back to the
+/// browser's own origin so preview deployments generate working links.
+export const SITE_ORIGIN =
+  typeof window !== "undefined" ? window.location.origin : "https://www.tsukipad.com";
+
 export const EXPLORER_URL = "https://testnet.arcscan.app";
 export const FAUCET_URL = "https://faucet.circle.com";
 

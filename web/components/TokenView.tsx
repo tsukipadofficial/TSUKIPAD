@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import { zeroAddress } from "viem";
 import type { Address } from "viem";
 
 import { Badge, Button, Card, CurveBar, LiveDot, Skeleton, Stat, cx } from "./ui";
@@ -329,6 +330,18 @@ export function TokenView({ token }: { token: Address }) {
           <BurnPanel launch={launch} />
 
           <CreatorLockPanel launch={launch} />
+
+          {/* A launch whose fees are earmarked has no recipient until somebody
+              proves the account is theirs, so a zero recipient is the signal. */}
+          {launch.feeRecipient === zeroAddress ? (
+            <Card className="border-cyan p-4">
+              <p className="eyebrow mb-2 text-cyan">{t("token.earmarked")}</p>
+              <p className="text-sm leading-relaxed text-muted">{t("token.earmarkedBody")}</p>
+              <Link href="/claim" className="mt-3 inline-block">
+                <Button variant="ghost" size="sm">{t("token.earmarkedCta")}</Button>
+              </Link>
+            </Card>
+          ) : null}
 
           {redirected ? (
             <Card className="border-pink p-4">

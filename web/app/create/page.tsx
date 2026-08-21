@@ -10,6 +10,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import { EMPTY_COMMITMENT, storedReferrer } from "@/lib/referral";
+import { PROVIDERS, commitmentFor, labelFor, type Provider } from "@/lib/commitment";
 
 import { Badge, Button, Card, Stat, cx } from "@/components/ui";
 import { CurvePreview } from "@/components/CurvePreview";
@@ -61,12 +62,19 @@ export default function CreatePage() {
   /// this is surfaced as an explicit choice rather than a buried setting.
   const [feeMode, setFeeMode] = useState<"creator" | "holders" | "redirect" | "burn">("creator");
   const [feeRecipientInput, setFeeRecipientInput] = useState("");
+  // A redirect can name a wallet, or earmark an identity that has none yet.
+  const [recipientKind, setRecipientKind] = useState<"wallet" | "identity">("wallet");
+  const [provider, setProvider] = useState<Provider>("x");
+  const [identityHandle, setIdentityHandle] = useState("");
   const [fundsLabel, setFundsLabel] = useState("");
 
   const rewardHolders = feeMode === "holders";
   const redirecting = feeMode === "redirect";
   const burning = feeMode === "burn";
-  const recipientValid = !redirecting || isAddress(feeRecipientInput.trim());
+  const earmarking = redirecting && recipientKind === "identity";
+  const commitment = earmarking ? commitmentFor(provider, identityHandle) : null;
+  const recipientValid =
+    !redirecting || (earmarking ? commitment !== null : isAddress(feeRecipientInput.trim()));
 
   const [mining, setMining] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -178,13 +186,15 @@ export default function CreatePage() {
             tickUpper,
             creatorAllocationBps: Math.round(allocationPct * 100),
             rewardHolders,
-            feeRecipient: redirecting
+            // An earmarked launch has no recipient at all until somebody proves
+            // the identity is theirs, so it deliberately goes out with zero.
+            feeRecipient: redirecting && !earmarking
               ? (feeRecipientInput.trim() as Address)
               : zeroAddress,
             buybackAndBurn: burning,
             // Earmarking fees for an identity is not wired into this form yet;
             // a launch made here always names a concrete recipient or nobody.
-            recipientCommitment: EMPTY_COMMITMENT,
+            recipientCommitment: commitment ?? EMPTY_COMMITMENT,
             // Carried from ?ref= if the creator arrived through someone's link.
             referrer: storedReferrer(),
           },
@@ -371,17 +381,68 @@ export default function CreatePage() {
 
               {redirecting ? (
                 <div className="mt-3 space-y-3 border-2 border-line p-3">
-                  <Field label={t("field.recipient")} hint={t("field.recipient.hint")}>
-                    <input
-                      value={feeRecipientInput}
-                      onChange={(e) => setFeeRecipientInput(e.target.value)}
-                      placeholder="0x…"
-                      className={cx(
-                        inputCx(feeRecipientInput === "" || recipientValid),
-                        "tabular",
-                      )}
-                    />
-                  </Field>
+                  <div className="flex gap-2">
+                    {(["wallet", "identity"] as const).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setRecipientKind(k)}
+                        className={cx(
+                          "flex-1 border-2 px-3 py-2 text-xs font-bold uppercase tracking-wide",
+                          recipientKind === k
+                            ? "border-lime bg-lime/10 text-lime"
+                            : "border-line text-muted hover:border-line-bright",
+                        )}
+                      >
+                        {t(k === "wallet" ? "field.recipient.wallet" : "field.recipient.identity")}
+                      </button>
+                    ))}
+                  </div>
+
+                  {recipientKind === "wallet" ? (
+                    <Field label={t("field.recipient")} hint={t("field.recipient.hint")}>
+                      <input
+                        value={feeRecipientInput}
+                        onChange={(e) => setFeeRecipientInput(e.target.value)}
+                        placeholder="0x…"
+                        className={cx(
+                          inputCx(feeRecipientInput === "" || recipientValid),
+                          "tabular",
+                        )}
+                      />
+                    </Field>
+                  ) : (
+                    <Field label={t("field.identity")} hint={t("field.identity.hint")}>
+                      <div className="flex gap-2">
+                        <select
+                          value={provider}
+                          onChange={(e) => setProvider(e.target.value as Provider)}
+                          className="border-2 border-line bg-void px-2 py-2.5 font-mono text-sm text-ink outline-none"
+                        >
+                          {PROVIDERS.map((p) => (
+                            <option key={p} value={p}>
+                              {p === "x" ? "X" : p === "github" ? "GitHub" : "Discord"}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          value={identityHandle}
+                          onChange={(e) => setIdentityHandle(e.target.value)}
+                          placeholder={provider === "github" ? "octocat" : "@handle"}
+                          className={cx(
+                            inputCx(identityHandle === "" || commitment !== null),
+                            "flex-1",
+                          )}
+                        />
+                      </div>
+                    </Field>
+                  )}
+
+                  {earmarking && commitment ? (
+                    <p className="text-xs leading-relaxed text-cyan">
+                      {t("field.identity.escrow", { who: labelFor(provider, identityHandle) })}
+                    </p>
+                  ) : null}
                   <Field
                     label={t("field.funds")}
                     optional

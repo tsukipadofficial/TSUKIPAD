@@ -418,6 +418,82 @@ const STRINGS = {
   },
   "fees.collect": { en: "Collect fees", ja: "手数料を回収" },
   "fees.collecting": { en: "Collecting…", ja: "回収中…" },
+  // --- referrals --------------------------------------------------------
+  "nav.referrals": { en: "Referrals", ja: "紹介" },
+  "ref.title": { en: "Bring people in.", ja: "仲間を連れてくる。" },
+  "ref.sub": {
+    en: "Share your link. When someone launches a token through it, you earn 10% of that token's swap fees for as long as it trades.",
+    ja: "リンクを共有してください。そのリンク経由でトークンがローンチされると、その取引が続く限り取引手数料の10%を獲得できます。",
+  },
+  "ref.signInFirst": { en: "Sign in to get your link.", ja: "サインインしてリンクを取得してください。" },
+  "ref.yourLink": { en: "Your link", ja: "あなたのリンク" },
+  "ref.copy": { en: "Copy", ja: "コピー" },
+  "ref.howItWorks": {
+    en: "The link records you in the visitor's browser. When they launch, you are written onto that token permanently — the rate is fixed at launch and cannot be changed afterwards, by us or anyone.",
+    ja: "リンクは訪問者のブラウザにあなたを記録します。ローンチ時にそのトークンへ恒久的に記録され、料率はローンチ時に固定され、後から誰も変更できません。",
+  },
+  "ref.yourLaunches": { en: "Launches you brought in", ja: "あなたが紹介したローンチ" },
+  "ref.count": { en: "{n} launches", ja: "{n}件" },
+  "ref.loading": { en: "Reading the board…", ja: "ボードを読込中…" },
+  "ref.empty": {
+    en: "Nothing yet. Share your link and it will show up here.",
+    ja: "まだありません。リンクを共有すると、ここに表示されます。",
+  },
+  "ref.paidAutomatically": {
+    en: "Referrals are paid straight to your wallet whenever anyone collects that launch's fees — there is nothing here to claim. Open a launch to collect it yourself.",
+    ja: "紹介報酬は、誰かがそのローンチの手数料を回収した時点であなたのウォレットへ直接支払われます。ここで請求する必要はありません。自分で回収するにはローンチを開いてください。",
+  },
+  // --- earmarking a recipient -------------------------------------------
+  "field.recipient.wallet": { en: "A wallet", ja: "ウォレット" },
+  "field.recipient.identity": { en: "An account", ja: "アカウント" },
+  "field.identity": { en: "Whose account", ja: "対象アカウント" },
+  "field.identity.hint": {
+    en: "For someone who has no wallet yet. Fees are held until they prove the account is theirs.",
+    ja: "ウォレットを持っていない相手向け。本人確認が済むまで手数料は保管されます。",
+  },
+  "field.identity.escrow": {
+    en: "Fees will be held for {who} until they sign in and prove the account is theirs. Nobody else can take them — not you, and not us.",
+    ja: "{who} がサインインして本人確認をするまで、手数料は保管されます。あなたにも当方にも引き出せません。",
+  },
+  // --- claiming an earmarked launch -------------------------------------
+  "nav.claim": { en: "Claim", ja: "受取" },
+  "claim.title": { en: "Claim fees earmarked for you.", ja: "あなた宛の手数料を受け取る。" },
+  "claim.sub": {
+    en: "Someone launched a token and set its fees aside for your account. Sign in with that account to collect them.",
+    ja: "誰かがあなたのアカウント宛に手数料を確保してローンチしました。そのアカウントでサインインして受け取ってください。",
+  },
+  "claim.signInFirst": { en: "Sign in with the account the fees were earmarked for.", ja: "対象アカウントでサインインしてください。" },
+  "claim.tokenLabel": { en: "Token address", ja: "トークンアドレス" },
+  "claim.providerLabel": { en: "Which account", ja: "アカウント種別" },
+  "claim.payTo": { en: "Fees will be paid to {addr}", ja: "手数料は {addr} に支払われます" },
+  "claim.check": { en: "Check my account", ja: "アカウントを確認" },
+  "claim.checking": { en: "Checking…", ja: "確認中…" },
+  "claim.verified": { en: "Verified as @{handle} — you can claim this.", ja: "@{handle} として確認できました。受け取れます。" },
+  "claim.claim": { en: "Claim the fees", ja: "手数料を受け取る" },
+  "claim.claiming": { en: "Claiming…", ja: "受取処理中…" },
+  "claim.done": { en: "Claimed.", ja: "受け取りました。" },
+  "claim.doneBody": {
+    en: "Everything held for you has been paid out, and future fees from this launch go straight to your wallet.",
+    ja: "保管されていた分は支払われ、今後の手数料はあなたのウォレットへ直接送られます。",
+  },
+  "claim.note": {
+    en: "We check the account with the provider itself. Only the account the launch named can claim, and only once.",
+    ja: "アカウントは各プロバイダで確認します。ローンチ時に指定されたアカウントのみが、一度だけ受け取れます。",
+  },
+  "claim.errSignIn": { en: "Sign in again — that session has expired.", ja: "セッションが切れました。再度サインインしてください。" },
+  "claim.errNotLinked": { en: "No {p} account is linked to this sign-in.", ja: "このサインインに {p} アカウントが連携されていません。" },
+  "claim.errNotEarmarked": { en: "That launch did not earmark its fees for anyone.", ja: "そのローンチは手数料を誰にも指定していません。" },
+  "claim.errNotYours": { en: "That launch earmarked its fees for a different account.", ja: "そのローンチは別のアカウント宛です。" },
+  "claim.errBadToken": { en: "That is not a token address.", ja: "トークンアドレスではありません。" },
+  "claim.errUnavailable": { en: "Claiming is not available yet.", ja: "受取はまだ利用できません。" },
+  "claim.errChain": { en: "The chain rejected it. It may already have been claimed.", ja: "チェーンに拒否されました。既に受け取り済みの可能性があります。" },
+  "claim.errGeneric": { en: "Something went wrong. Try again.", ja: "エラーが発生しました。再試行してください。" },
+  "token.earmarked": { en: "Fees earmarked, unclaimed", ja: "手数料は確保済み・未受取" },
+  "token.earmarkedBody": {
+    en: "This launch set its fees aside for a social account rather than a wallet. They are held here, untouchable by the creator and by us, until that account signs in and proves it.",
+    ja: "このローンチは手数料をウォレットではなくソーシャルアカウント宛に確保しています。本人が確認するまで、発行者にも当方にも引き出せません。",
+  },
+  "token.earmarkedCta": { en: "Is this you? Claim it", ja: "あなたですか？受け取る" },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;
