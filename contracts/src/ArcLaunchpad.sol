@@ -412,14 +412,32 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         (uint128 owed0, uint128 owed1) =
             p.collect(address(this), l.tickLower, l.tickUpper, type(uint128).max, type(uint128).max);
 
-        uint256 protocol0 = (uint256(owed0) * protocolFeeBps) / 10_000;
-        uint256 protocol1 = (uint256(owed1) * protocolFeeBps) / 10_000;
-        uint256 creator0 = owed0 - protocol0;
-        uint256 creator1 = owed1 - protocol1;
+        // Convert the token side to USDC before splitting anything, so every
+        // payout is denominated in USDC and nobody is left holding a bag of a
+        // token they did not choose to own.
+        //
+        // These fees are what sellers paid on the way out -- a 1% fee tier means
+        // selling them back adds 1% on top of a sell that already happened, and
+        // only ever after a sell. The alternative, paying them out in kind, hands
+        // creators and the treasury dust across every dead launch.
+        uint256 usdcFromToken;
+        uint256 unsoldToken = owed0;
+        if (owed0 >= MIN_FEE_SWAP) {
+            (uint256 sold, uint256 got) = _sellFeesForUsdc(l, owed0);
+            usdcFromToken = got;
+            unsoldToken = owed0 - sold;
+        }
 
-        // Token-side fees always go to the creator. Routing them to holders
-        // would mean selling the token into its own pool to realise USDC, which
-        // is sell pressure a launch does not need.
+        uint256 totalUsdc = uint256(owed1) + usdcFromToken;
+
+        uint256 protocol0 = (unsoldToken * protocolFeeBps) / 10_000;
+        uint256 protocol1 = (totalUsdc * protocolFeeBps) / 10_000;
+        uint256 creator0 = unsoldToken - protocol0;
+        uint256 creator1 = totalUsdc - protocol1;
+
+        // Anything the swap could not clear -- a pool out of range, or a balance
+        // below MIN_FEE_SWAP -- is paid in kind rather than stranded. This is the
+        // old behaviour, now only a fallback.
         if (creator0 > 0) {
             if (unclaimed) escrowToken[token] += creator0;
             else IERC20(l.token).safeTransfer(l.feeRecipient, creator0);
@@ -492,16 +510,61 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         }
     }
 
+    /// @notice Smallest token-fee balance worth converting.
+    /// @dev Below this the swap costs more gas than the USDC it returns, and a
+    ///      quiet launch would burn gas on dust at every collection.
+    uint256 public constant MIN_FEE_SWAP = 1e15; // 0.001 token
+
+    /// @dev Sell exactly `amountIn` of a launch's token back into its own pool.
+    ///
+    ///      `amountIn` is always the amount collected in *this* call and never a
+    ///      balance lookup. The launchpad also custodies creator allocations
+    ///      awaiting unlock and escrow for unclaimed launches, all in the same
+    ///      token; selling `balanceOf(this)` would quietly spend those.
+    ///
+    ///      Returns what was sold and what came back. A swap that cannot execute
+    ///      returns zero rather than reverting: fees are collected on behalf of
+    ///      the creator, and a pool that has drifted out of range must not make
+    ///      collecting impossible.
+    function _sellFeesForUsdc(Launch memory l, uint256 amountIn)
+        private
+        returns (uint256 sold, uint256 usdcOut)
+    {
+        _swappingPool = l.pool;
+        // zeroForOne = true: paying token0 (the token) to receive token1 (USDC).
+        // Stop at the bottom of the launch range -- there is no liquidity below
+        // it, and the price should never be pushed under the opening tick.
+        try IUniswapV3Pool(l.pool).swap(
+            address(this),
+            true,
+            int256(amountIn),
+            TickMath.getSqrtRatioAtTick(l.tickLower),
+            abi.encode(l.token)
+        ) returns (int256 amount0, int256 amount1) {
+            sold = uint256(amount0);
+            usdcOut = uint256(-amount1);
+        } catch {
+            sold = 0;
+            usdcOut = 0;
+        }
+        _swappingPool = address(0);
+    }
+
     /// @inheritdoc IUniswapV3SwapCallback
     function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external override {
         if (msg.sender != _swappingPool || _swappingPool == address(0)) revert UnauthorizedCallback();
 
-        // Only the USDC side is ever owed: the launchpad exclusively buys.
-        if (amount1Delta <= 0) revert UnexpectedUsdcOwed();
-        if (amount0Delta > 0) revert UnexpectedUsdcOwed();
-        data; // token address is implied by the authenticated pool
-
-        IERC20(USDC).safeTransfer(msg.sender, uint256(amount1Delta));
+        // The launchpad swaps in both directions now: it buys the token back
+        // with USDC for buy-and-burn, and sells collected token fees for USDC so
+        // that every payout is denominated in USDC. Exactly one side is ever
+        // owed, and the pool is already authenticated by `_swappingPool`.
+        if (amount0Delta > 0) {
+            IERC20(abi.decode(data, (address))).safeTransfer(msg.sender, uint256(amount0Delta));
+        } else if (amount1Delta > 0) {
+            IERC20(USDC).safeTransfer(msg.sender, uint256(amount1Delta));
+        } else {
+            revert UnexpectedUsdcOwed();
+        }
     }
 
     /// @notice Release a creator's locked allocation once the lock has expired.

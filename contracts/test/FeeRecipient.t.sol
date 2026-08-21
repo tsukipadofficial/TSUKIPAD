@@ -121,9 +121,13 @@ contract FeeRecipientTest is Test {
         assertGt(usdc.balanceOf(creator), 0, "creator paid as usual");
     }
 
-    /// @dev A launch can both fund a project and reward holders: USDC goes to
-    ///      holders, and the token-side fees go to the nominated recipient.
-    function test_redirectCombinesWithHolderRewards() public {
+    /// @dev Holder rewards take precedence over a redirect, the same way
+    ///      buy-and-burn does. Both are USDC destinations, and fees are now all
+    ///      USDC -- the token side is sold before anything is split -- so there
+    ///      is nothing left over for a recipient to receive. The two are already
+    ///      mutually exclusive in the create form; this pins the contract-level
+    ///      behaviour so the UI cannot drift away from it silently.
+    function test_holderRewardsTakePrecedenceOverARedirect() public {
         LaunchToken token = _launch(goodCause, true);
 
         // The creator keeps only the rounding dust from the liquidity mint.
@@ -149,8 +153,9 @@ contract FeeRecipientTest is Test {
 
         launchpad.collectFees(address(token));
 
-        assertGt(token.totalRewardsReceived(), 0, "holders got the USDC");
-        assertGt(token.balanceOf(goodCause), 0, "cause got the token-side fees");
+        assertGt(token.totalRewardsReceived(), 0, "holders got every USDC of it");
+        assertEq(token.balanceOf(goodCause), 0, "cause got no tokens: the token side was converted");
+        assertEq(usdc.balanceOf(goodCause), 0, "cause got no USDC either: holder rewards win");
         assertEq(usdc.balanceOf(creator), 0, "creator got no USDC");
         assertEq(token.balanceOf(creator), creatorDust, "creator got no token fees, only pre-existing dust");
     }
@@ -164,5 +169,108 @@ contract FeeRecipientTest is Test {
 
         // And the recorded value cannot drift.
         assertEq(launchpad.launchOf(address(token)).feeRecipient, goodCause);
+    }
+
+    /// @dev Fees arrive on both sides of the pool -- buyers pay theirs in USDC,
+    ///      sellers pay theirs in the token -- and everything is paid out in USDC.
+    function test_everyPayoutIsUsdcEvenWhenSellersPaidInToken() public {
+        LaunchToken token = _launch(goodCause, false);
+
+        uint256 bought = _buy(alice, address(token), 10_000e6);
+
+        // Selling is what produces token-denominated fees.
+        vm.startPrank(alice);
+        IERC20(address(token)).approve(address(router), bought);
+        router.exactInputSingle(
+            ArcSwapRouter.ExactInputSingleParams({
+                tokenIn: address(token),
+                tokenOut: USDC_ADDR,
+                fee: FEE,
+                recipient: alice,
+                deadline: block.timestamp + 1,
+                amountIn: bought,
+                amountOutMinimum: 0
+            })
+        );
+        vm.stopPrank();
+
+        launchpad.collectFees(address(token));
+
+        console2.log("cause USDC (6dp): ", usdc.balanceOf(goodCause));
+        console2.log("treasury USDC:    ", usdc.balanceOf(treasury));
+
+        assertGt(usdc.balanceOf(goodCause), 0, "recipient paid in USDC");
+        assertGt(usdc.balanceOf(treasury), 0, "treasury paid in USDC");
+        assertEq(token.balanceOf(goodCause), 0, "recipient holds none of the token");
+        assertEq(token.balanceOf(treasury), 0, "treasury holds none of the token");
+    }
+
+    /// @dev The launchpad custodies creator allocations awaiting unlock, so a fee
+    ///      swap must sell only what this collection produced. Selling a balance
+    ///      lookup instead would quietly spend somebody else's locked allocation.
+    function test_feeSwapNeverTouchesALockedCreatorAllocation() public {
+        // A launch that withholds 10% of supply for its creator.
+        bytes32 salt;
+        for (uint256 i = 0; i < 5_000; i++) {
+            if (launchpad.predictTokenAddress(creator, "Held", "HELD", SUPPLY, "", false, bytes32(i)) < USDC_ADDR) {
+                salt = bytes32(i);
+                break;
+            }
+        }
+        vm.prank(creator);
+        (address held,) = launchpad.launch(
+            ArcLaunchpad.LaunchParams({
+                name: "Held",
+                symbol: "HELD",
+                metadataURI: "",
+                totalSupply: SUPPLY,
+                salt: salt,
+                tickLower: TICK_LOWER,
+                tickUpper: TICK_UPPER,
+                creatorAllocationBps: 1_000,
+                rewardHolders: false,
+                feeRecipient: address(0),
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
+            })
+        );
+
+        uint256 owedToCreator = launchpad.launchOf(held).creatorAllocation;
+        assertGt(owedToCreator, 0, "allocation is being custodied");
+        assertEq(IERC20(held).balanceOf(address(launchpad)), owedToCreator, "held exactly");
+
+        // Churn a *different* launch enough to trigger a fee swap.
+        LaunchToken other = _launch(goodCause, false);
+        uint256 bought = _buy(alice, address(other), 10_000e6);
+        vm.startPrank(alice);
+        IERC20(address(other)).approve(address(router), bought);
+        router.exactInputSingle(
+            ArcSwapRouter.ExactInputSingleParams({
+                tokenIn: address(other),
+                tokenOut: USDC_ADDR,
+                fee: FEE,
+                recipient: alice,
+                deadline: block.timestamp + 1,
+                amountIn: bought,
+                amountOutMinimum: 0
+            })
+        );
+        vm.stopPrank();
+        launchpad.collectFees(address(other));
+
+        assertEq(
+            IERC20(held).balanceOf(address(launchpad)),
+            owedToCreator,
+            "the other launch's allocation is untouched"
+        );
+
+        // Compare the delta: the creator also received mint dust at launch, so
+        // their balance was never just the allocation.
+        uint256 before = IERC20(held).balanceOf(creator);
+        vm.warp(block.timestamp + 31 minutes);
+        launchpad.claimCreatorAllocation(held);
+        assertEq(
+            IERC20(held).balanceOf(creator) - before, owedToCreator, "creator still receives all of it"
+        );
     }
 }
