@@ -371,6 +371,18 @@ const STRINGS = {
   "wl.errGeneric": { en: "Something went wrong. Try again.", ja: "エラーが発生しました。再試行してください。" },
   "wl.unavailable": { en: "The waitlist is not connected yet.", ja: "ウェイトリストは未接続です。" },
   "nav.waitlist": { en: "Waitlist", ja: "登録" },
+  // --- waitlist share ---------------------------------------------------
+  "wl.share": { en: "Spread the word", ja: "広めてください" },
+  "wl.shareBody": {
+    en: "Posting is what actually gets a launch seen. We cannot verify a repost, so this is not gated — but it is the single most useful thing you can do here.",
+    ja: "投稿こそが最も効果的です。リポストの検証はできないため必須にはしていませんが、ここで最も役立つ行動です。",
+  },
+  "wl.follow": { en: "Follow @tsukipad_", ja: "@tsukipad_ をフォロー" },
+  "wl.post": { en: "Post your place", ja: "順位を投稿" },
+  "wl.tweet": {
+    en: "I'm #{rank} on the @tsukipad_ waitlist.\n\nFair-launch tokens straight into a Uniswap V3 USDC pool on Arc Network. $3,000 opening market cap, 100% of supply becomes the liquidity, LP burned on launch.\n\ntsukipad.com",
+    ja: "@tsukipad_ のウェイトリストで{rank}位です。\n\nArc Network上のUniswap V3 USDCプールへ直接フェアローンチ。時価総額$3,000から、供給量の100%が流動性に、LPはローンチ時にバーン。\n\ntsukipad.com",
+  },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;

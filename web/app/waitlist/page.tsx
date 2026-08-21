@@ -7,7 +7,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { Button, Card, cx } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import { signMessage, normaliseHandle } from "@/lib/waitlist";
-import { STORAGE_PREFIX } from "@/lib/brand";
+import { STORAGE_PREFIX, X_HANDLE } from "@/lib/brand";
 
 type BoardRow = { rank: number; display: string; clearance: 50 | 100 };
 type Board = { total: number; board: BoardRow[]; configured: boolean };
@@ -48,7 +48,20 @@ export default function WaitlistPage() {
     try {
       const r = await fetch("/api/waitlist", { cache: "no-store" });
       const j = await r.json();
-      if (j.ok) setData({ total: j.total, board: j.board, configured: j.configured });
+      if (!j.ok) return;
+      setData({ total: j.total, board: j.board, configured: j.configured });
+      // Recover rank and clearance for someone returning in a new session:
+      // both otherwise live only in the state set by a join earlier on.
+      const saved = localStorage.getItem(SAVED);
+      if (saved) {
+        const mine = (j.board as BoardRow[]).find(
+          (row) => row.display.toLowerCase() === saved.toLowerCase(),
+        );
+        if (mine) {
+          setRank(mine.rank);
+          setVerified(mine.clearance === 100);
+        }
+      }
     } catch {
       /* board is decorative; a failed refresh should not break the form */
     }
@@ -244,6 +257,36 @@ export default function WaitlistPage() {
           ))
         )}
       </Card>
+
+      {/* share ---------------------------------------------------------- */}
+      {claimed && (
+        <Card className="mt-6 p-6">
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-sm text-pink">03</span>
+            <h2 className="text-xl font-bold">{t("wl.share")}</h2>
+            <span className="ml-auto font-mono text-xs text-faint">optional</span>
+          </div>
+          <p className="mt-2 max-w-2xl text-sm text-muted">{t("wl.shareBody")}</p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <a
+              href={`https://x.com/intent/follow?screen_name=${X_HANDLE}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button variant="ghost">{t("wl.follow")}</Button>
+            </a>
+            <a
+              href={`https://x.com/intent/post?text=${encodeURIComponent(
+                t("wl.tweet", { rank: rank !== null ? String(rank) : "?" }),
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button variant="pink">{t("wl.post")}</Button>
+            </a>
+          </div>
+        </Card>
+      )}
 
       {/* why ------------------------------------------------------------ */}
       <h2 className="mt-14 text-2xl font-bold">{t("wl.why")}</h2>

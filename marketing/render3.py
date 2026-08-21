@@ -152,7 +152,7 @@ def s_end(im, d, t):
     if t > 0.22:
         ctext(d, W / 2, H / 2 + 75, 'tsukipad.com', sg(88), fill=INK, mid=True)
     if t > 0.42:
-        ctext(d, W / 2, H / 2 + 185, '@tsukipadhq', jb(44), fill=LIME, mid=True)
+        ctext(d, W / 2, H / 2 + 185, '@tsukipad_', jb(44), fill=LIME, mid=True)
     if t > 0.62:
         tag = DATE_LONG if MODE == 'announce' else 'LIVE NOW'
         bw, bh = 560, 68

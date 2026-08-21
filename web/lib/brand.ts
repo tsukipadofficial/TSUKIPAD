@@ -24,6 +24,10 @@ export const SITE_URL = "https://www.tsukipad.com";
 export const X_URL = "https://x.com/tsukipad_";
 export const TELEGRAM_URL = "https://t.me/tsukipadofficial";
 
+/// Official X handle, without the @. Referenced by the waitlist share flow and
+/// by the marketing renderers in marketing/.
+export const X_HANDLE = "tsukipad_";
+
 /// Descriptive tagline. Uses only phrasing the Arc guidelines permit —
 /// "built on Arc Network" positions Arc as infrastructure, not as our identity.
 export const TAGLINE = "launch tokens on Arc Network";

@@ -221,7 +221,7 @@ def s_end(im,d,t):                                    # bar 9
     if t>0.25:
         ctext(d,W/2,H/2+70,'tsukipad.com',sg(76),fill=INK,mid=True)
     if t>0.45:
-        ctext(d,W/2,H/2+160,'@tsukipadhq',jb(40),fill=LIME,mid=True)
+        ctext(d,W/2,H/2+160,'@tsukipad_',jb(40),fill=LIME,mid=True)
     if t>0.65:
         ctext(d,W/2,H-150,'BUILT ON ARC NETWORK',jbr(28),fill=MUTED,mid=True)
         ctext(d,W/2,H-100,'Arc is a trademark of Circle Internet Group, Inc.',jbr(19),fill=(78,78,90),mid=True)

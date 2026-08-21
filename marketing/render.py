@@ -345,7 +345,7 @@ def scene_endcard(im, d, t):                      # bar 12 (22-24s)
     a = out_expo(t / 0.5)
     ctext(d, W/2, H/2 - 100, 'tsukipad.com', sg(int(104)), fill=INK, anchor_mid=True)
     if t > 0.3:
-        ctext(d, W/2, H/2 + 10, '@tsukipadhq', jb(46), fill=LIME, anchor_mid=True)
+        ctext(d, W/2, H/2 + 10, '@tsukipad_', jb(46), fill=LIME, anchor_mid=True)
     if t > 0.55:
         bw2, bh2 = 520, 66
         brut(d, [W/2 - bw2/2, H/2 + 90, W/2 + bw2/2, H/2 + 90 + bh2],
