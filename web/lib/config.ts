@@ -20,6 +20,15 @@ export const chain = arcTestnet;
 export const RPC_URL =
   process.env.NEXT_PUBLIC_RPC_URL ?? "https://rpc.testnet.arc.io";
 
+/// Privy app id. Public by design -- it identifies the app to Privy's client
+/// SDK. The *app secret* is server-side only and must never appear here.
+export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
+
+/// WalletConnect project id, also a public client identifier. Lets Privy offer
+/// mobile wallets alongside injected ones.
+export const WALLETCONNECT_PROJECT_ID =
+  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "";
+
 export const EXPLORER_URL = "https://testnet.arcscan.app";
 export const FAUCET_URL = "https://faucet.circle.com";
 

@@ -23,7 +23,7 @@ const STRINGS = {
   // --- chrome ---------------------------------------------------------
   "nav.board": { en: "Board", ja: "ボード" },
   "nav.launch": { en: "Launch", ja: "発行" },
-  "nav.connect": { en: "Connect", ja: "接続" },
+  "nav.connect": { en: "Sign in", ja: "サインイン" },
   "nav.connecting": { en: "Connecting…", ja: "接続中…" },
   "nav.switchToArc": { en: "Switch to Arc", ja: "Arcに切替" },
   "nav.explorer": { en: "Explorer", ja: "エクスプローラ" },
@@ -351,7 +351,7 @@ const STRINGS = {
   "wl.joining": { en: "Claiming…", ja: "確保中…" },
   "wl.sign": { en: "Sign to verify", ja: "署名して認証" },
   "wl.signing": { en: "Waiting for signature…", ja: "署名待ち…" },
-  "wl.connectFirst": { en: "Connect wallet", ja: "ウォレット接続" },
+  "wl.connectFirst": { en: "Sign in to continue", ja: "サインインして続行" },
   "wl.placeholder": { en: "yourhandle", ja: "yourhandle" },
   "wl.you": { en: "You are #{rank} of {total}", ja: "{total}人中 {rank}位" },
   "wl.board": { en: "The board", ja: "ボード" },

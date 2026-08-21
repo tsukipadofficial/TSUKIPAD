@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useAccount, useConnect, useSignMessage } from "wagmi";
+import { useAccount, useSignMessage } from "wagmi";
+import { usePrivy } from "@privy-io/react-auth";
 
 import { Button, Card, cx } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
@@ -28,7 +29,9 @@ function Meter({ pct }: { pct: number }) {
 export default function WaitlistPage() {
   const { t } = useI18n();
   const { address, isConnected } = useAccount();
-  const { connect, connectors } = useConnect();
+  // Privy mints an embedded wallet for email/social users, so step 02 works
+  // for someone who has never held a wallet before.
+  const { login, ready } = usePrivy();
   const { signMessageAsync } = useSignMessage();
 
   const [handle, setHandle] = useState("");
@@ -187,11 +190,7 @@ export default function WaitlistPage() {
           <p className="mt-2 text-sm text-muted">{t("wl.step2b")}</p>
           <div className="mt-4">
             {!isConnected ? (
-              <Button
-                variant="ghost"
-                disabled={!claimed}
-                onClick={() => connect({ connector: connectors[0] })}
-              >
+              <Button variant="ghost" disabled={!claimed || !ready} onClick={() => login()}>
                 {t("wl.connectFirst")}
               </Button>
             ) : verified ? (

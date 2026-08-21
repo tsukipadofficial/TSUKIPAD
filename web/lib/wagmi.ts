@@ -1,12 +1,13 @@
-import { http, createConfig, createStorage, cookieStorage } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { http, createStorage, cookieStorage } from "wagmi";
+import { createConfig } from "@privy-io/wagmi";
 import { chain, RPC_URL } from "./config";
 
-/// Injected-only by default: WalletConnect needs a project id, and Arc testnet
-/// work is overwhelmingly MetaMask/Rabby. Add more connectors here if needed.
+/// `createConfig` comes from @privy-io/wagmi, not wagmi, so Privy can drive
+/// wagmi's connector state. Connectors are deliberately absent: Privy supplies
+/// them (injected, WalletConnect, and the embedded wallet it mints for users
+/// who sign in with email or a social account).
 export const wagmiConfig = createConfig({
   chains: [chain],
-  connectors: [injected()],
   storage: createStorage({ storage: cookieStorage }),
   ssr: true,
   transports: {

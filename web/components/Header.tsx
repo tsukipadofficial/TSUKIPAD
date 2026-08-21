@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAccount, useConnect, useDisconnect, useReadContract, useSwitchChain } from "wagmi";
+import { useAccount, useReadContract, useSwitchChain } from "wagmi";
+import { usePrivy } from "@privy-io/react-auth";
 
 import { Button, cx, LiveDot } from "./ui";
 import { Logo } from "./Logo";
@@ -22,8 +23,9 @@ export function Header() {
   const pathname = usePathname();
   const { t, lang, setLang } = useI18n();
   const { address, isConnected, chainId } = useAccount();
-  const { connect, connectors, isPending } = useConnect();
-  const { disconnect } = useDisconnect();
+  // Privy owns sign-in now: email, Google, X, GitHub, Discord or an external
+  // wallet, all funnelled into one modal.
+  const { login, logout, ready, authenticated } = usePrivy();
   const { switchChain } = useSwitchChain();
 
   const wrongNetwork = isConnected && chainId !== chain.id;
@@ -35,8 +37,6 @@ export function Header() {
     args: address ? [address] : undefined,
     query: { enabled: !!address && !wrongNetwork, refetchInterval: 15_000 },
   });
-
-  const injectedConnector = connectors.find((c) => c.id === "injected") ?? connectors[0];
 
   return (
     <header className="sticky top-0 z-50 border-b-2 border-line bg-void/85 backdrop-blur">
@@ -107,17 +107,13 @@ export function Header() {
             <Button variant="pink" size="sm" onClick={() => switchChain({ chainId: chain.id })}>
               {t("nav.switchToArc")}
             </Button>
-          ) : isConnected ? (
-            <Button variant="ghost" size="sm" onClick={() => disconnect()}>
-              <span className="tabular">{shortAddress(address!)}</span>
+          ) : authenticated && address ? (
+            <Button variant="ghost" size="sm" onClick={() => void logout()}>
+              <span className="tabular">{shortAddress(address)}</span>
             </Button>
           ) : (
-            <Button
-              size="sm"
-              disabled={isPending || !injectedConnector}
-              onClick={() => injectedConnector && connect({ connector: injectedConnector })}
-            >
-              {isPending ? t("nav.connecting") : t("nav.connect")}
+            <Button size="sm" disabled={!ready} onClick={() => login()}>
+              {ready ? t("nav.connect") : t("nav.connecting")}
             </Button>
           )}
         </div>
