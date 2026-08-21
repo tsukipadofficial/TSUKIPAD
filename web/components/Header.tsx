@@ -109,7 +109,8 @@ export function Header() {
             </Button>
           ) : authenticated && address ? (
             <Button variant="ghost" size="sm" onClick={() => void logout()}>
-              <span className="tabular">{shortAddress(address)}</span>
+              {/* btn-brut uppercases its label, which would render 0x as 0X. */}
+              <span className="tabular normal-case">{shortAddress(address)}</span>
             </Button>
           ) : (
             <Button size="sm" disabled={!ready} onClick={() => login()}>
