@@ -37,7 +37,13 @@ a coding session. That is correct for testnet and unacceptable for mainnet.
 
 - [ ] Generate a fresh deployer key that has never touched a dev machine
 - [ ] Choose a **separate** treasury address (a multisig if any real revenue is
-      expected)
+      expected). Currently nominated:
+
+          TREASURY=0x9977f2119F574d8FdA463AE4Bf45983BdC7d91bd
+
+      This is a plain wallet. Every protocol fee lands here, so before mainnet
+      it should be a multisig — a single key holding the platform's revenue is
+      one compromised laptop away from losing all of it.
 - [ ] Deploy with `TREASURY=` set explicitly — the deploy script now refuses to
       run on any non-testnet chain if treasury equals deployer
 - [ ] After deploying, `transferOwnership()` to a multisig and have it accept
