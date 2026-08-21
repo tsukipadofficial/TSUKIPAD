@@ -6,9 +6,21 @@ solc = "0.8.26"
 optimizer = true
 # ArcLaunchpad embeds LaunchToken's full initcode (it deploys tokens with CREATE2),
 # which puts it close to the 24,576-byte EIP-170 limit. 1,000,000 runs pushed it to
-# 24,999 and the deploy failed outright; 20,000 lands at ~22,050 with runtime gas
-# essentially unchanged. Do not raise this without checking `forge build --sizes`.
-optimizer_runs = 20_000
+# 24,999 and the deploy failed outright.
+#
+# Adding the fee-recipient escrow took it over the limit at 20,000 (26,410). Measured
+# across settings, with hot-path gas from the fee and sell round-trip tests:
+#
+#   runs    size     margin    hot-path gas
+#   20,000  26,410   -1,834    (does not deploy)
+#   4,000   25,036     -460    6,826,044 / 6,991,760
+#   1,000   23,621      955    6,687,356 / 6,853,324
+#   200     21,775    2,801    6,692,471 / 6,858,752
+#
+# Gas is flat below 1,000 -- these paths are dominated by the launch itself, not by
+# inlining -- so the low setting costs users nothing and buys back headroom.
+# Do not raise this without checking `forge build --sizes`.
+optimizer_runs = 200
 via_ir = true
 evm_version = "cancun"
 bytecode_hash = "none"
