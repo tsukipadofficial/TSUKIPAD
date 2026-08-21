@@ -32,13 +32,21 @@ export const chain = {
 } as const satisfies Chain;
 
 /// Privy app id. Public by design -- it identifies the app to Privy's client
-/// SDK. The *app secret* is server-side only and must never appear here.
-export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
+/// SDK and already ships in the browser bundle, so there is nothing to hide by
+/// keeping it out of the repo. It is defaulted rather than left empty because
+/// PrivyProvider throws on an invalid id during prerender, which breaks CI and
+/// any fresh clone that has no .env.local.
+///
+/// The *app secret* is a different thing entirely: server-side only, and this
+/// app never references it.
+export const PRIVY_APP_ID =
+  process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "cmt1u8i3r01v10dicbnswb0k4";
 
 /// WalletConnect project id, also a public client identifier. Lets Privy offer
 /// mobile wallets alongside injected ones.
 export const WALLETCONNECT_PROJECT_ID =
-  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "";
+  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ??
+  "df953ee3175df1a5b40eb420d24a34c0";
 
 export const EXPLORER_URL = "https://testnet.arcscan.app";
 export const FAUCET_URL = "https://faucet.circle.com";
