@@ -62,7 +62,8 @@ contract OnchainMetadataTest is Test {
                 creatorAllocationBps: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
         gasUsed = before - gasleft();
@@ -133,7 +134,8 @@ contract OnchainMetadataTest is Test {
                 creatorAllocationBps: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
         gasUsed = before - gasleft();

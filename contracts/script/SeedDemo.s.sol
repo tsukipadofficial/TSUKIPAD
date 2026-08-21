@@ -86,7 +86,8 @@ contract SeedDemo is Script {
                 creatorAllocationBps: allocationBps,
                 rewardHolders: d.rewardHolders,
                 feeRecipient: d.feeRecipient,
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
 

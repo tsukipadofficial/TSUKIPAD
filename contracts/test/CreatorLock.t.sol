@@ -65,7 +65,8 @@ contract CreatorLockTest is Test {
                 creatorAllocationBps: allocationBps,
                 rewardHolders: false,
                 feeRecipient: address(0),
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
     }
@@ -210,7 +211,8 @@ contract CreatorLockTest is Test {
                 creatorAllocationBps: 1_000,
                 rewardHolders: true,
                 feeRecipient: address(0),
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
 

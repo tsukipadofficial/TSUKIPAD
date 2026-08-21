@@ -65,7 +65,8 @@ contract BuybackBurnTest is Test {
                 creatorAllocationBps: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
-                buybackAndBurn: buyback
+                buybackAndBurn: buyback,
+                recipientCommitment: bytes32(0)
             })
         );
         token = LaunchToken(t);
@@ -243,7 +244,8 @@ contract BuybackBurnTest is Test {
                 creatorAllocationBps: 0,
                 rewardHolders: true,
                 feeRecipient: address(0),
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
         LaunchToken token = LaunchToken(t);

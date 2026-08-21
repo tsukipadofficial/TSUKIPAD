@@ -70,7 +70,8 @@ contract FeeRecipientTest is Test {
                 creatorAllocationBps: 0,
                 rewardHolders: rewardHolders,
                 feeRecipient: feeRecipient,
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
         token = LaunchToken(t);

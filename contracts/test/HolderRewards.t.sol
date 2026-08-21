@@ -79,7 +79,8 @@ contract HolderRewardsTest is Test {
                 creatorAllocationBps: 0,
                 rewardHolders: rewardHolders,
                 feeRecipient: address(0),
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
         token = LaunchToken(t);

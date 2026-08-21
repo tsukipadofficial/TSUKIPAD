@@ -104,7 +104,8 @@ contract SeedLaunchesOnly is Script {
                 creatorAllocationBps: d.allocationBps,
                 rewardHolders: d.rewardHolders,
                 feeRecipient: d.feeRecipient,
-                buybackAndBurn: d.buybackAndBurn
+                buybackAndBurn: d.buybackAndBurn,
+                recipientCommitment: bytes32(0)
             })
         );
 

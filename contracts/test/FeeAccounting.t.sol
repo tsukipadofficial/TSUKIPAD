@@ -78,7 +78,8 @@ contract FeeAccountingTest is Test {
                 creatorAllocationBps: 0,
                 rewardHolders: rewardHolders,
                 feeRecipient: feeRecipient,
-                buybackAndBurn: burn
+                buybackAndBurn: burn,
+                recipientCommitment: bytes32(0)
             })
         );
         token = LaunchToken(t);

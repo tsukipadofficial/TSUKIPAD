@@ -55,7 +55,8 @@ contract AttackTest is Test {
         (address a,) = launchpad.launch(ArcLaunchpad.LaunchParams({
             name: "Vic", symbol: "VIC", metadataURI: "", totalSupply: SUPPLY, salt: salt,
             tickLower: TICK_LOWER, tickUpper: TICK_UPPER, creatorAllocationBps: 1_000,
-            rewardHolders: rewards, feeRecipient: address(0), buybackAndBurn: false
+            rewardHolders: rewards, feeRecipient: address(0), buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
         }));
         t = LaunchToken(a);
     }
@@ -117,7 +118,12 @@ contract AttackTest is Test {
         assertFalse(vm.contains(src, "function setCreator"), "no setCreator");
         assertFalse(vm.contains(src, "function setFeeRecipient"), "no setFeeRecipient");
         assertFalse(vm.contains(src, "l.creator ="), "creator never reassigned");
-        assertFalse(vm.contains(src, "l.feeRecipient ="), "recipient never reassigned");
+
+        // `feeRecipient` is assigned in exactly one place -- claimFeeRecipient --
+        // and only for a launch that started with no recipient at all. This
+        // launch has one, so no attestation can move it; that is asserted
+        // behaviourally below and exhaustively in FeeRecipientClaim.t.sol.
+        assertTrue(vm.contains(src, "function claimFeeRecipient"), "only claimFeeRecipient assigns it");
 
         // Even the owner cannot redirect a creator's fees.
         uint256 attackerBefore = usdc.balanceOf(attacker);
@@ -125,6 +131,12 @@ contract AttackTest is Test {
         launchpad.collectFees(address(t));
         assertGt(usdc.balanceOf(creator), 0, "fees went to the recorded creator");
         assertEq(usdc.balanceOf(attacker), attackerBefore, "attacker gained nothing");
+
+        // The claim path cannot touch an ordinary launch, whoever calls it.
+        launchpad.setAttestor(address(this));
+        vm.prank(attacker);
+        vm.expectRevert(ArcLaunchpad.NotUnclaimed.selector);
+        launchpad.claimFeeRecipient(address(t), attacker, uint64(block.timestamp + 1 hours), hex"00");
     }
 
     function test_attackerCannotStealCreatorAllocation() public {

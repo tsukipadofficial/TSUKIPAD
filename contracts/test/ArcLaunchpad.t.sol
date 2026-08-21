@@ -106,7 +106,8 @@ contract ArcLaunchpadTest is Test {
                 creatorAllocationBps: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
     }
@@ -216,7 +217,8 @@ contract ArcLaunchpadTest is Test {
                 creatorAllocationBps: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
     }
@@ -237,7 +239,8 @@ contract ArcLaunchpadTest is Test {
                 creatorAllocationBps: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
     }
@@ -258,7 +261,8 @@ contract ArcLaunchpadTest is Test {
                 creatorAllocationBps: 2_001,
                 rewardHolders: false,
                 feeRecipient: address(0),
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
     }
@@ -452,7 +456,8 @@ contract ArcLaunchpadTest is Test {
                 creatorAllocationBps: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
 
@@ -479,7 +484,8 @@ contract ArcLaunchpadTest is Test {
                 creatorAllocationBps: 1_000, // 10%
                 rewardHolders: false,
                 feeRecipient: address(0),
-                buybackAndBurn: false
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0)
             })
         );
 

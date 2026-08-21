@@ -84,6 +84,20 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     /// @notice Protocol share of collected swap fees, in bps. Remainder to creator.
     uint16 public protocolFeeBps;
 
+    /// @notice Address permitted to attest that a wallet belongs to the identity
+    ///         a launch earmarked its fees for.
+    /// @dev This is the one trusted role in the contract, and it is deliberately
+    ///      narrow: an attestation can only bind an address to a launch whose
+    ///      commitment it names, only once, and it can never move fees that have
+    ///      already been claimed or redirect an ordinary launch.
+    address public attestor;
+
+    /// @notice How long an unclaimed launch is held before the escrow can be swept.
+    /// @dev Without this, an earmark nobody ever claims strands the fees forever.
+    ///      The sweep pays the treasury rather than the creator on purpose: paying
+    ///      the creator would reward inventing a recipient who never appears.
+    uint64 public constant UNCLAIMED_PERIOD = 365 days;
+
     /// @notice Flat USDC charged to create a launch. Spam control; may be zero.
     uint256 public launchFee;
 
@@ -122,6 +136,21 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     /// @notice token => index into `launches`, offset by one (0 means "not a launch").
     mapping(address => uint256) private _launchIndexPlusOne;
 
+    /// @notice Hash of the identity a launch earmarked its fees for, if any.
+    /// @dev While this is set and the launch's `feeRecipient` is still zero, the
+    ///      launch is *unclaimed* and its creator-share fees accrue below.
+    ///
+    ///      Kept beside the registry rather than inside `Launch` deliberately:
+    ///      that struct is ABI-encoded on return by `launchOf` and again, as an
+    ///      array, by `recentLaunches`, so each field added to it costs bytecode
+    ///      several times over -- and this contract is within 2KB of EIP-170
+    ///      because it embeds LaunchToken's entire initcode.
+    mapping(address => bytes32) public recipientCommitment;
+
+    /// @notice Creator-share fees held for an unclaimed launch.
+    mapping(address => uint256) public escrowToken;
+    mapping(address => uint256) public escrowUsdc;
+
     /// @dev Set only for the duration of a `pool.mint` call, to authenticate the callback.
     address private _mintingPool;
 
@@ -154,6 +183,9 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     event TreasuryUpdated(address treasury);
     event ProtocolFeeUpdated(uint16 bps);
     event LaunchFeeUpdated(uint256 fee);
+    event AttestorUpdated(address attestor);
+    event FeeRecipientClaimed(address indexed token, address indexed recipient, uint256 tokenAmount, uint256 usdcAmount);
+    event UnclaimedFeesSwept(address indexed token, uint256 tokenAmount, uint256 usdcAmount);
 
     // ---------------------------------------------------------------------
     // Errors
@@ -172,6 +204,12 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     error FeeTooHigh();
     error StillLocked();
     error AllocationAlreadyClaimed();
+    error NotUnclaimed();
+    error NoAttestor();
+    error BadAttestation();
+    error AttestationExpired();
+    error StillClaimable();
+    error ZeroRecipient();
 
     constructor(address usdc_, address factory_, uint24 poolFee_, address treasury_, uint16 protocolFeeBps_)
         Ownable(msg.sender)
@@ -218,6 +256,14 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         ///      back off its own pool and burning it, shrinking supply forever.
         ///      Takes precedence over `rewardHolders`. Immutable once launched.
         bool buybackAndBurn;
+        /// @dev Earmark fees for an identity rather than an address, for the case
+        ///      where the intended recipient has no wallet yet. Set this to a hash
+        ///      of that identity and leave `feeRecipient` zero; fees then accrue
+        ///      here until `claimFeeRecipient` binds an address to it.
+        ///
+        ///      Publishing a hash rather than the handle keeps the earmark
+        ///      verifiable after the fact without putting the handle on-chain.
+        bytes32 recipientCommitment;
     }
 
     /// @notice Deploy a token, open its USDC pool, and seed it with single-sided liquidity.
@@ -285,7 +331,9 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
                 token: token,
                 pool: pool,
                 creator: msg.sender,
-                feeRecipient: params.feeRecipient == address(0) ? msg.sender : params.feeRecipient,
+                feeRecipient: params.recipientCommitment != bytes32(0)
+                    ? address(0)
+                    : (params.feeRecipient == address(0) ? msg.sender : params.feeRecipient),
                 tickLower: params.tickLower,
                 tickUpper: params.tickUpper,
                 liquidity: liquidity,
@@ -299,6 +347,9 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
             })
         );
         _launchIndexPlusOne[token] = launches.length;
+        if (params.recipientCommitment != bytes32(0)) {
+            recipientCommitment[token] = params.recipientCommitment;
+        }
 
         // The allocation stays here until the lock expires. Only the rounding
         // dust left over from the mint goes out now, so the launchpad holds
@@ -312,7 +363,9 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
             token,
             pool,
             msg.sender,
-            params.feeRecipient == address(0) ? msg.sender : params.feeRecipient,
+            params.recipientCommitment != bytes32(0)
+                ? address(0)
+                : (params.feeRecipient == address(0) ? msg.sender : params.feeRecipient),
             params.name,
             params.symbol,
             params.metadataURI,
@@ -349,6 +402,11 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         if (idxPlusOne == 0) revert NotALaunch();
         Launch memory l = launches[idxPlusOne - 1];
 
+        // Earmarked, but nobody has proved they are the recipient yet. Fees are
+        // held rather than sent, because there is no address that can receive
+        // them without weakening the promise the launch made.
+        bool unclaimed = recipientCommitment[token] != bytes32(0) && l.feeRecipient == address(0);
+
         IUniswapV3Pool p = IUniswapV3Pool(l.pool);
         p.burn(l.tickLower, l.tickUpper, 0);
         (uint128 owed0, uint128 owed1) =
@@ -362,7 +420,10 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         // Token-side fees always go to the creator. Routing them to holders
         // would mean selling the token into its own pool to realise USDC, which
         // is sell pressure a launch does not need.
-        if (creator0 > 0) IERC20(l.token).safeTransfer(l.feeRecipient, creator0);
+        if (creator0 > 0) {
+            if (unclaimed) escrowToken[token] += creator0;
+            else IERC20(l.token).safeTransfer(l.feeRecipient, creator0);
+        }
         if (protocol0 > 0) IERC20(l.token).safeTransfer(treasury, protocol0);
 
         // USDC-side fees follow the mode chosen at launch.
@@ -373,6 +434,8 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
                 IERC20(USDC).safeTransfer(l.token, creator1);
                 LaunchToken(l.token).notifyRewards();
                 emit HolderRewardsFunded(l.token, creator1);
+            } else if (unclaimed) {
+                escrowUsdc[token] += creator1;
             } else {
                 IERC20(USDC).safeTransfer(l.feeRecipient, creator1);
             }
@@ -532,6 +595,96 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     // ---------------------------------------------------------------------
     // Admin
     // ---------------------------------------------------------------------
+
+    /// @notice Bind a wallet to an earmarked launch and release its held fees.
+    /// @dev Whether a wallet belongs to a social identity cannot be decided
+    ///      on-chain, so it is decided off-chain and attested to here. The
+    ///      attestation is scoped tightly on purpose: it names one launch, one
+    ///      recipient and one commitment, carries a deadline, and is bound to
+    ///      this contract and chain so it cannot be replayed elsewhere.
+    ///
+    ///      Binding is one-way. Once set, `feeRecipient` is never zero again, so
+    ///      neither the creator nor the owner can redirect a launch that has
+    ///      already been claimed -- the promise a launch made about where its
+    ///      fees go survives this function.
+    function claimFeeRecipient(
+        address token,
+        address recipient,
+        uint64 deadline,
+        bytes calldata signature
+    ) external nonReentrant {
+        if (recipient == address(0)) revert ZeroRecipient();
+        if (attestor == address(0)) revert NoAttestor();
+        if (block.timestamp > deadline) revert AttestationExpired();
+
+        uint256 idxPlusOne = _launchIndexPlusOne[token];
+        if (idxPlusOne == 0) revert NotALaunch();
+        Launch storage l = launches[idxPlusOne - 1];
+        bytes32 commitment = recipientCommitment[token];
+        if (commitment == bytes32(0) || l.feeRecipient != address(0)) revert NotUnclaimed();
+
+        // ecrecover directly rather than the OpenZeppelin helper: the library
+        // costs ~2.5KB here, and this contract already sits close to EIP-170
+        // because it embeds LaunchToken's full initcode. Signature malleability
+        // is not a concern for this use -- a malleated signature authorises the
+        // identical bound action, and a launch can only be claimed once anyway.
+        bytes32 inner =
+            keccak256(abi.encode(block.chainid, address(this), token, recipient, commitment, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", inner));
+
+        if (signature.length != 65) revert BadAttestation();
+        bytes32 sigR;
+        bytes32 sigS;
+        uint8 sigV;
+        assembly ("memory-safe") {
+            sigR := calldataload(signature.offset)
+            sigS := calldataload(add(signature.offset, 32))
+            sigV := byte(0, calldataload(add(signature.offset, 64)))
+        }
+        address signer = ecrecover(digest, sigV, sigR, sigS);
+        if (signer == address(0) || signer != attestor) revert BadAttestation();
+
+        l.feeRecipient = recipient;
+
+        uint256 owedToken = escrowToken[token];
+        uint256 owedUsdc = escrowUsdc[token];
+        escrowToken[token] = 0;
+        escrowUsdc[token] = 0;
+
+        if (owedToken > 0) IERC20(token).safeTransfer(recipient, owedToken);
+        if (owedUsdc > 0) IERC20(USDC).safeTransfer(recipient, owedUsdc);
+
+        emit FeeRecipientClaimed(token, recipient, owedToken, owedUsdc);
+    }
+
+    /// @notice Sweep the escrow of a launch nobody claimed, after UNCLAIMED_PERIOD.
+    /// @dev Deliberately pays the treasury and not the creator: paying the creator
+    ///      would make inventing a recipient who never appears profitable. The
+    ///      launch stays claimable afterwards, so a recipient who turns up late
+    ///      still receives everything the position earns from then on.
+    function sweepUnclaimedFees(address token) external onlyOwner nonReentrant {
+        uint256 idxPlusOne = _launchIndexPlusOne[token];
+        if (idxPlusOne == 0) revert NotALaunch();
+        Launch memory l = launches[idxPlusOne - 1];
+        if (recipientCommitment[token] == bytes32(0) || l.feeRecipient != address(0)) revert NotUnclaimed();
+        if (block.timestamp < uint256(l.createdAt) + UNCLAIMED_PERIOD) revert StillClaimable();
+
+        uint256 owedToken = escrowToken[token];
+        uint256 owedUsdc = escrowUsdc[token];
+        escrowToken[token] = 0;
+        escrowUsdc[token] = 0;
+
+        if (owedToken > 0) IERC20(token).safeTransfer(treasury, owedToken);
+        if (owedUsdc > 0) IERC20(USDC).safeTransfer(treasury, owedUsdc);
+
+        emit UnclaimedFeesSwept(token, owedToken, owedUsdc);
+    }
+
+    /// @notice Set the address permitted to attest wallet ownership of an identity.
+    function setAttestor(address attestor_) external onlyOwner {
+        attestor = attestor_;
+        emit AttestorUpdated(attestor_);
+    }
 
     function setTreasury(address treasury_) external onlyOwner {
         treasury = treasury_;
