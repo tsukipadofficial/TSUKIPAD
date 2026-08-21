@@ -247,6 +247,11 @@ const STRINGS = {
   "token.sell": { en: "SELL", ja: "売り" },
   "token.notFound": { en: "Not a launch from this pad.", ja: "このローンチパッド発行のトークンではありません。" },
   "token.notFound.body": { en: "{addr} was not created here.", ja: "{addr}はここで発行されていません。" },
+  "token.loadFailed": { en: "Could not load this token.", ja: "このトークンを読み込めませんでした。" },
+  "token.loadFailedBody": {
+    en: "The network did not answer. This is not a problem with the token — retrying.",
+    ja: "ネットワークが応答しませんでした。トークン側の問題ではありません。再試行しています。",
+  },
   "token.back": { en: "Back to the board", ja: "ボードに戻る" },
   "token.notConfigured": { en: "Contracts are not configured yet.", ja: "コントラクトが未設定です。" },
 

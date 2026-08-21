@@ -56,13 +56,18 @@ export type LaunchView = RawLaunch & {
 
 /// Reads the launch registry, then enriches each entry with live pool state and
 /// token metadata. Batched through multicall3, which Arc has deployed.
-export function useLaunches(limit = 60) {
+///
+/// Intervals here are deliberately slack. At 60 entries this fans out to 420
+/// reads per poll, which earned a -32005 "rate limit exceeded" from the public
+/// Arc RPC -- and a rate-limited read used to surface as "not a launch from
+/// this pad", so throttling is a correctness matter, not just politeness.
+export function useLaunches(limit = 30) {
   const registry = useReadContract({
     address: LAUNCHPAD_ADDRESS,
     abi: launchpadAbi,
     functionName: "recentLaunches",
     args: [0n, BigInt(limit)],
-    query: { enabled: isDeployed, refetchInterval: 12_000 },
+    query: { enabled: isDeployed, refetchInterval: 20_000 },
   });
 
   const raw = (registry.data ?? []) as readonly RawLaunch[];
@@ -83,7 +88,7 @@ export function useLaunches(limit = 60) {
 
   const details = useReadContracts({
     contracts: detailCalls,
-    query: { enabled: raw.length > 0, refetchInterval: 12_000 },
+    query: { enabled: raw.length > 0, refetchInterval: 20_000 },
   });
 
   const launches = useMemo<LaunchView[]>(() => {
@@ -135,7 +140,7 @@ export function useLaunch(token: Address | undefined) {
     abi: launchpadAbi,
     functionName: "launchOf",
     args: token ? [token] : undefined,
-    query: { enabled: isDeployed && !!token, refetchInterval: 15_000 },
+    query: { enabled: isDeployed && !!token, refetchInterval: 20_000 },
   });
 
   const l = entry.data as RawLaunch | undefined;
@@ -152,7 +157,7 @@ export function useLaunch(token: Address | undefined) {
           { address: l.token, abi: launchTokenAbi, functionName: "totalRewardsReceived" } as const,
         ]
       : [],
-    query: { enabled: !!l, refetchInterval: 6_000 },
+    query: { enabled: !!l, refetchInterval: 15_000 },
   });
 
   const launch = useMemo<LaunchView | null>(() => {
@@ -180,10 +185,17 @@ export function useLaunch(token: Address | undefined) {
     });
   }, [l, details.data]);
 
+  // launchOf returns a zero-filled struct for a token this pad did not create.
+  // That -- not an RPC failure -- is what "not a launch" means. Treating a
+  // failed read as proof of absence told people their own token did not exist.
+  const ZERO = "0x0000000000000000000000000000000000000000";
+  const notFound = !!l && (l.token === ZERO || l.pool === ZERO);
+
   return {
     launch,
     isLoading: entry.isLoading || details.isLoading,
-    notFound: !!entry.error,
+    notFound,
+    error: entry.error ?? details.error ?? null,
   };
 }
 

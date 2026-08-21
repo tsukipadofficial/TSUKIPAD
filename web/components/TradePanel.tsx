@@ -57,7 +57,7 @@ export function TradePanel({ launch }: { launch: LaunchView }) {
     abi: erc20Abi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    query: { enabled: !!address && !wrongChain, refetchInterval: 12_000 },
+    query: { enabled: !!address && !wrongChain, refetchInterval: 20_000 },
   });
 
   const { data: allowance, refetch: refetchAllowance } = useReadContract({

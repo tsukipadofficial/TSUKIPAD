@@ -50,7 +50,7 @@ export function Header() {
     abi: erc20Abi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    query: { enabled: !!address && !wrongNetwork, refetchInterval: 15_000 },
+    query: { enabled: !!address && !wrongNetwork, refetchInterval: 30_000 },
   });
 
   return (

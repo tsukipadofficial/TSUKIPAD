@@ -32,7 +32,7 @@ export function RewardsPanel({ launch }: { launch: LaunchView }) {
     args: address ? [address] : undefined,
     query: {
       enabled: launch.rewardsEnabled && !!address && !wrongChain,
-      refetchInterval: 10_000,
+      refetchInterval: 20_000,
     },
   });
 
@@ -41,7 +41,7 @@ export function RewardsPanel({ launch }: { launch: LaunchView }) {
     abi: launchTokenAbi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    query: { enabled: launch.rewardsEnabled && !!address, refetchInterval: 15_000 },
+    query: { enabled: launch.rewardsEnabled && !!address, refetchInterval: 30_000 },
   });
 
   useEffect(() => {

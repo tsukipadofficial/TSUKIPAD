@@ -21,7 +21,7 @@ import { useI18n } from "@/lib/i18n";
 
 export function TokenView({ token }: { token: Address }) {
   const { t, lang } = useI18n();
-  const { launch, isLoading, notFound } = useLaunch(token);
+  const { launch, isLoading, notFound, error } = useLaunch(token);
   const { trades, isLoading: tradesLoading } = useTrades(launch?.pool);
 
   const meta = useMemo(
@@ -47,6 +47,22 @@ export function TokenView({ token }: { token: Address }) {
           <Skeleton className="h-96 border-2 border-line" />
           <Skeleton className="h-96 border-2 border-line" />
         </div>
+      </Wrapper>
+    );
+  }
+
+  // A failed read is not the same claim as "this token was never launched
+  // here". Saying the latter when we mean the former is the worse mistake.
+  if (!notFound && (error || !launch)) {
+    return (
+      <Wrapper>
+        <Card className="p-12 text-center">
+          <p className="text-2xl font-bold text-amber">{t("token.loadFailed")}</p>
+          <p className="mt-2 text-sm text-muted">{t("token.loadFailedBody")}</p>
+          <Link href="/" className="mt-6 inline-block">
+            <Button variant="ghost">{t("token.back")}</Button>
+          </Link>
+        </Card>
       </Wrapper>
     );
   }
