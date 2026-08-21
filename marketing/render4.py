@@ -84,13 +84,16 @@ def s_reward(im, d, t):                                 # bar 5 -- the payoff
     ctext(d, W/2, 430, 'AT 100%', jbr(30), fill=MUTED, mid=True)
     ctext(d, W/2, 530, 'DAY-ONE', sg(int(112 * (0.85 + 0.15 * k))), fill=LIME, mid=True)
     ctext(d, W/2, 640, 'ALLOWLIST', sg(int(112 * (0.85 + 0.15 * k))), fill=LIME, mid=True)
+    # No airdrop is promised here: there is no launchpad token on day one, and
+    # a reward you cannot deliver is worse than a smaller one you can.
     if t > 0.55:
         a = out_expo((t - 0.55) / 0.5)
-        bw, bh = 560, 92
+        bw, bh = 700, 92
         brut(d, [W/2 - bw/2, 740, W/2 + bw/2, 740 + bh], fill=VOID, border=PINK, off=8)
-        ctext(d, W/2, 740 + bh/2, '+ AIRDROP', jb(46), fill=mix(VOID, PINK, a), mid=True)
+        ctext(d, W/2, 740 + bh/2, 'LAUNCH BEFORE THE PUBLIC', jb(36),
+              fill=mix(VOID, PINK, a), mid=True)
     if t > 1.1:
-        ctext(d, W/2, 890, 'for signed wallets on the board', jbr(26),
+        ctext(d, W/2, 890, 'whatever comes later starts with this list', jbr(26),
               fill=mix(VOID, FAINT, out_expo((t - 1.1) / 0.5)), mid=True)
 
 BOARD = [('JohnnOnchain', 100), ('Alphagam', 100), ('hojansh', 100), ('you', None)]
