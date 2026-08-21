@@ -8,6 +8,7 @@ import { fetchLaunches, type TokenInfo, client, priceFromSqrt } from "../../lib/
 import { poolAbi } from "../../lib/abi";
 import { usd, short, ago, countdown } from "../../lib/format";
 import { Card, Eyebrow, Tag } from "../../components/ui";
+import { TradePanel } from "../../components/TradePanel";
 import { EXPLORER_URL, TOKEN_DECIMALS } from "../../lib/config";
 
 /// Samples slot0 as the screen is open. Arc testnet has no price history API,
@@ -42,9 +43,15 @@ function Spark({ data, w = 320, h = 90 }: { data: number[]; w?: number; h?: numb
     );
   }
   const min = Math.min(...data), max = Math.max(...data);
-  const span = max - min || max || 1;
+  const span = max - min;
+  // A perfectly flat price makes span 0. Draw it down the middle rather than
+  // pinned to the bottom, which reads as "broken" instead of "unchanged".
   const pts = data
-    .map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / span) * (h - 8) - 4}`)
+    .map((v, i) => {
+      const x = (i / (data.length - 1)) * w;
+      const y = span === 0 ? h / 2 : h - ((v - min) / span) * (h - 8) - 4;
+      return `${x},${y}`;
+    })
     .join(" ");
   const up = data[data.length - 1] >= data[0];
   return (
@@ -71,16 +78,34 @@ export default function TokenScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let alive = true;
     (async () => {
-      const all = await fetchLaunches(50);
-      const found = all.find((x) => x.token.toLowerCase() === String(address).toLowerCase()) ?? null;
-      setT(found);
-      if (found) {
-        const t0 = await client.readContract({ address: found.pool, abi: poolAbi, functionName: "token0" });
-        setIsToken0(t0.toLowerCase() === found.token.toLowerCase());
+      // Every read here can fail on Arc's rate-limited public RPC. Without the
+      // finally, one rejection leaves the screen spinning forever.
+      try {
+        const all = await fetchLaunches(50);
+        const found = all.find((x) => x.token.toLowerCase() === String(address).toLowerCase()) ?? null;
+        if (!alive) return;
+        setT(found);
+        if (found) {
+          try {
+            const t0 = await client.readContract({
+              address: found.pool, abi: poolAbi, functionName: "token0",
+            });
+            if (alive) setIsToken0(t0.toLowerCase() === found.token.toLowerCase());
+          } catch {
+            // Orientation unknown: the price chart falls back to the board's
+            // figure rather than blocking the whole page.
+            if (alive) setIsToken0(undefined);
+          }
+        }
+      } catch {
+        if (alive) setT(null);
+      } finally {
+        if (alive) setLoading(false);
       }
-      setLoading(false);
     })();
+    return () => { alive = false; };
   }, [address]);
 
   const series = useLivePrice(t?.pool, isToken0);
@@ -148,19 +173,7 @@ export default function TokenScreen() {
         </View>
 
         <View style={{ marginTop: 22 }}>
-          <Pressable onPress={() => Linking.openURL(`https://www.tsukipad.com/token/${t.token}`)}>
-            <Card accent>
-              <View style={{ padding: 17, alignItems: "center" }}>
-                <Text style={{ fontFamily: font.display, fontSize: 16, color: c.void }}>
-                  TRADE ON TSUKIPAD.COM
-                </Text>
-              </View>
-            </Card>
-          </Pressable>
-          <Text style={{ fontFamily: font.mono, fontSize: 11, color: c.faint, marginTop: 12, lineHeight: 17 }}>
-            Trading opens the site, where your browser wallet signs. In-app
-            signing needs a WalletConnect project id — see mobile/README.md.
-          </Text>
+          <TradePanel t={t} />
         </View>
 
         <Pressable onPress={() => Linking.openURL(`${EXPLORER_URL}/address/${t.token}`)} style={{ marginTop: 18 }}>

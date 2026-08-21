@@ -31,6 +31,33 @@ export const erc20Abi = [
   { type: "function", name: "totalSupply", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
   { type: "function", name: "balanceOf", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
   { type: "function", name: "tokenURI", inputs: [], outputs: [{ type: "string" }], stateMutability: "view" },
+  {
+    type: "function", name: "allowance",
+    inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }],
+    outputs: [{ type: "uint256" }], stateMutability: "view",
+  },
+  {
+    type: "function", name: "approve",
+    inputs: [{ name: "spender", type: "address" }, { name: "amount", type: "uint256" }],
+    outputs: [{ type: "bool" }], stateMutability: "nonpayable",
+  },
+] as const;
+
+export const swapRouterAbi = [
+  {
+    type: "function", name: "exactInputSingle",
+    inputs: [{
+      name: "params", type: "tuple",
+      components: [
+        { name: "tokenIn", type: "address" }, { name: "tokenOut", type: "address" },
+        { name: "fee", type: "uint24" }, { name: "recipient", type: "address" },
+        { name: "deadline", type: "uint256" }, { name: "amountIn", type: "uint256" },
+        { name: "amountOutMinimum", type: "uint256" },
+      ],
+    }],
+    outputs: [{ name: "amountOut", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
 ] as const;
 
 export const poolAbi = [

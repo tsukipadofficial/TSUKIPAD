@@ -53,17 +53,35 @@ sends each read separately (`batch: false`), caps concurrency at 2 launches at
 a time, and retries three times with backoff. A launch whose reads still fail
 stays on the board without a price rather than silently disappearing.
 
-## Why there is no in-app trading
+## Trading
 
-Signing a transaction on iOS requires WalletConnect, which requires a project id
-from https://dashboard.reown.com. The project does not have one yet, so the
-Trade button opens `tsukipad.com`, where a browser wallet signs.
+Buy and sell happen in the app. Sign-in is **Privy** with an embedded wallet —
+social login creates the wallet, so there is no seed phrase, no MetaMask and no
+WalletConnect project id.
 
-To add in-app signing:
+Quotes come from static-calling the router's `exactInputSingle`, the same way
+the web app does, so the figure includes fees and price impact rather than
+estimating them. Signed out, the panel falls back to the pool's mid price and
+labels it an estimate.
 
-1. Get a WalletConnect project id.
-2. `npx expo install @reown/appkit-react-native @walletconnect/react-native-compat`
-3. Put the id in `lib/config.ts` and wrap the root layout in the AppKit provider.
+Set your Privy app id in `mobile/.env` (see `.env.example`). The app id is
+public; the Privy **app secret** is server-side only and must never appear in
+this app.
+
+### Things that had to be worked around
+
+- **`metro.config.js` disables package exports.** Privy depends on `jose`,
+  whose exports map has no `react-native` condition, so Metro picks the Node
+  build and fails on `util`/`zlib`/`buffer`/`crypto`. With exports off, the
+  `browser` field resolves correctly.
+- **Polyfills are imported first in `app/_layout.tsx`** — `fast-text-encoding`,
+  `react-native-get-random-values` and `@ethersproject/shims`. React Native has
+  no Web Crypto, TextEncoder or Buffer, and Privy needs all three.
+- **The Sign in with Apple entitlement is stripped after prebuild.** Privy
+  imports `expo-apple-authentication` unconditionally, and its config plugin
+  adds an entitlement that demands a paid signing team even for a simulator
+  build. We authenticate with Google, so the capability is removed:
+  `/usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" ios/TSUKIPAD/TSUKIPAD.entitlements`
 
 ## Why the create flow is not here
 

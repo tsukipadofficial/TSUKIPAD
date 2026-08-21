@@ -26,3 +26,4 @@ mobile/node_modules/
 mobile/ios/
 mobile/android/
 mobile/.expo/
+mobile/.env

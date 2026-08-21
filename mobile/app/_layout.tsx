@@ -1,3 +1,9 @@
+// Privy's crypto path needs these before anything else loads: React Native
+// has no Web Crypto, no TextEncoder and no Buffer by default.
+import "fast-text-encoding";
+import "react-native-get-random-values";
+import "@ethersproject/shims";
+
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
@@ -14,6 +20,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { Splash } from "../components/Splash";
+import { WalletProvider } from "../lib/wallet";
 import { c } from "../lib/theme";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -35,7 +42,7 @@ export default function RootLayout() {
   if (!loaded) return <View style={{ flex: 1, backgroundColor: c.void }} />;
 
   return (
-    <>
+    <WalletProvider>
       <StatusBar style="light" />
       {introDone ? null : <Splash onDone={() => setIntroDone(true)} />}
       <Stack
@@ -47,8 +54,8 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="token/[address]" options={{ title: "" }} />
+        <Stack.Screen name="token/[address]" options={{ title: "", headerBackTitle: "Board" }} />
       </Stack>
-    </>
+    </WalletProvider>
   );
 }

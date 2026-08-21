@@ -1,7 +1,7 @@
 import { createPublicClient, defineChain, http, type Address } from "viem";
 import { CHAIN_ID, RPC_URL, USDC_ADDRESS, USDC_DECIMALS, TOKEN_DECIMALS } from "./config";
-import { launchpadAbi, erc20Abi, poolAbi } from "./abi";
-import { LAUNCHPAD_ADDRESS } from "./config";
+import { launchpadAbi, erc20Abi, poolAbi, swapRouterAbi } from "./abi";
+import { LAUNCHPAD_ADDRESS, SWAP_ROUTER_ADDRESS, POOL_FEE } from "./config";
 
 export const arcTestnet = defineChain({
   id: CHAIN_ID,
@@ -98,4 +98,48 @@ export async function fetchUsdcBalance(addr: Address): Promise<number> {
     address: USDC_ADDRESS, abi: erc20Abi, functionName: "balanceOf", args: [addr],
   });
   return Number(bal) / 10 ** USDC_DECIMALS;
+}
+
+/// Quotes a swap by static-calling the router, exactly as the web app does.
+/// Simulating `exactInputSingle` returns the real output including fees and
+/// price impact, so there is no separate Quoter contract to keep in step.
+///
+/// The simulation is run from the trader's own address because the router
+/// pulls tokens; without a funded account with an allowance it reverts, which
+/// is reported as "no quote" rather than an error.
+export async function quoteSwap(args: {
+  tokenIn: Address; tokenOut: Address; amountIn: bigint; account: Address;
+}): Promise<bigint | null> {
+  try {
+    const { result } = await client.simulateContract({
+      address: SWAP_ROUTER_ADDRESS,
+      abi: swapRouterAbi,
+      functionName: "exactInputSingle",
+      account: args.account,
+      args: [{
+        tokenIn: args.tokenIn,
+        tokenOut: args.tokenOut,
+        fee: POOL_FEE,
+        recipient: args.account,
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 900),
+        amountIn: args.amountIn,
+        amountOutMinimum: 0n,
+      }],
+    });
+    return result as bigint;
+  } catch {
+    return null;
+  }
+}
+
+/// Price the pool would give with no slippage, used to show price impact.
+export function midPrice(priceUsd: number, usdcIn: number): number {
+  return priceUsd > 0 ? usdcIn / priceUsd : 0;
+}
+
+export async function allowanceOf(token: Address, owner: Address): Promise<bigint> {
+  return client.readContract({
+    address: token, abi: erc20Abi, functionName: "allowance",
+    args: [owner, SWAP_ROUTER_ADDRESS],
+  });
 }

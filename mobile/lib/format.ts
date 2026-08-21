@@ -1,3 +1,10 @@
+/// Renders the zero-run in a tiny price as a subscript count, the convention
+/// every token screener uses (e.g. $0.0₅3021).
+function subscript(n: number): string {
+  const glyphs = "₀₁₂₃₄₅₆₇₈₉";
+  return String(n).split("").map((d) => glyphs[Number(d)]).join("");
+}
+
 export function usd(v: number): string {
   if (!Number.isFinite(v)) return "$0";
   if (v === 0) return "$0";
@@ -9,7 +16,7 @@ export function usd(v: number): string {
   const exp = Math.floor(Math.log10(v));
   const zeros = Math.abs(exp) - 1;
   const digits = Math.round(v * 10 ** (zeros + 3));
-  return `$0.0{${zeros}}${digits}`;
+  return `$0.0${subscript(zeros)}${digits}`;
 }
 
 export function short(a: string): string {

@@ -8,6 +8,7 @@ import { fetchLaunches, type TokenInfo } from "../../lib/chain";
 import { TOKEN_DECIMALS, EXPLORER_URL } from "../../lib/config";
 import { usd, short } from "../../lib/format";
 import { Card, Eyebrow } from "../../components/ui";
+import { useWallet } from "../../lib/wallet";
 
 type Holding = { t: TokenInfo; amount: number; valueUsd: number };
 
@@ -15,6 +16,7 @@ type Holding = { t: TokenInfo; amount: number; valueUsd: number };
 /// the project doesn't have yet; until then an address can be tracked without
 /// asking anyone to expose a key.
 export default function Portfolio() {
+  const wallet = useWallet();
   const [addr, setAddr] = useState("");
   const [tracked, setTracked] = useState<Address | null>(null);
   const [usdc, setUsdc] = useState<number | null>(null);
@@ -49,6 +51,33 @@ export default function Portfolio() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: c.void }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+      {wallet.address ? (
+        <View style={{ marginBottom: 22 }}>
+          <Eyebrow>signed in</Eyebrow>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
+            <Text style={{ fontFamily: font.monoBold, fontSize: 15, color: c.lime }}>
+              {short(wallet.address)}
+            </Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Pressable onPress={() => { setAddr(wallet.address!); }}>
+                <Text style={{ fontFamily: font.mono, fontSize: 12, color: c.cyan }}>track mine</Text>
+              </Pressable>
+              <Pressable onPress={wallet.logout}>
+                <Text style={{ fontFamily: font.mono, fontSize: 12, color: c.faint }}>sign out</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : (
+        <Pressable onPress={wallet.connect} style={{ marginBottom: 22 }}>
+          <View style={{ backgroundColor: c.lime, borderWidth: 2, borderColor: c.void, paddingVertical: 14, alignItems: "center" }}>
+            <Text style={{ fontFamily: font.display, fontSize: 15, color: c.void }}>
+              {wallet.connecting ? "SIGNING IN…" : "SIGN IN TO TRADE"}
+            </Text>
+          </View>
+        </Pressable>
+      )}
+
       <Eyebrow>track an address</Eyebrow>
       <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
         <TextInput
