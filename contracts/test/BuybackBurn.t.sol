@@ -264,4 +264,50 @@ contract BuybackBurnTest is Test {
         launchpad.collectFees(address(token));
         assertGt(token.pendingRewards(alice), 0, "alice still earns on what she kept");
     }
+
+    /// @dev Buy-and-burn burns the token-side fees outright rather than selling
+    ///      them for USDC and immediately buying the same token back. The round
+    ///      trip paid the pool fee and slippage twice to arrive in the same
+    ///      place, destroying measurably less supply than it collected.
+    function test_tokenSideFeesAreBurnedDirectlyNotRoundTripped() public {
+        LaunchToken token = _launch(true);
+
+        uint256 bought = _buy(alice, address(token), 40_000e6);
+
+        // Selling is what produces token-denominated fees in the first place.
+        vm.startPrank(alice);
+        IERC20(address(token)).approve(address(router), bought);
+        router.exactInputSingle(
+            ArcSwapRouter.ExactInputSingleParams({
+                tokenIn: address(token),
+                tokenOut: USDC_ADDR,
+                fee: FEE,
+                recipient: alice,
+                deadline: block.timestamp + 1,
+                amountIn: bought,
+                amountOutMinimum: 0
+            })
+        );
+        vm.stopPrank();
+
+        uint256 supplyBefore = token.totalSupply();
+        uint256 burnedBefore = launchpad.launchOf(address(token)).tokensBurned;
+
+        launchpad.collectFees(address(token));
+
+        uint256 burnedNow = launchpad.launchOf(address(token)).tokensBurned;
+        console2.log("supply burned this collection:", supplyBefore - token.totalSupply());
+        console2.log("tokensBurned delta:           ", burnedNow - burnedBefore);
+
+        assertGt(burnedNow, burnedBefore, "supply was destroyed");
+        assertEq(supplyBefore - token.totalSupply(), burnedNow - burnedBefore, "accounting matches reality");
+
+        // The treasury is owed money, not supply reduction, so its share is still
+        // converted -- and it must never come out in kind.
+        assertGt(usdc.balanceOf(treasury), 0, "treasury paid in USDC");
+        assertEq(token.balanceOf(treasury), 0, "treasury holds none of the token");
+
+        // The creator earns nothing in this mode: their share became burnt supply.
+        assertEq(usdc.balanceOf(creator), 0, "creator takes no USDC in buyback mode");
+    }
 }

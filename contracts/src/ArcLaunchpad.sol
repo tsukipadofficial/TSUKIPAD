@@ -412,28 +412,49 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         (uint128 owed0, uint128 owed1) =
             p.collect(address(this), l.tickLower, l.tickUpper, type(uint128).max, type(uint128).max);
 
-        // Convert the token side to USDC before splitting anything, so every
+        // The token side is converted to USDC before anything is split, so every
         // payout is denominated in USDC and nobody is left holding a bag of a
-        // token they did not choose to own.
-        //
-        // These fees are what sellers paid on the way out -- a 1% fee tier means
-        // selling them back adds 1% on top of a sell that already happened, and
-        // only ever after a sell. The alternative, paying them out in kind, hands
-        // creators and the treasury dust across every dead launch.
-        uint256 usdcFromToken;
-        uint256 unsoldToken = owed0;
-        if (owed0 >= MIN_FEE_SWAP) {
-            (uint256 sold, uint256 got) = _sellFeesForUsdc(l, owed0);
-            usdcFromToken = got;
-            unsoldToken = owed0 - sold;
+        // token they did not choose to own. These fees are what sellers paid on
+        // the way out -- at a 1% tier, selling them back adds 1% on top of a sell
+        // that already happened, and only ever after a sell.
+        bool burning = l.buybackAndBurn && _canBuyBack(l);
+
+        uint256 protocol0 = (uint256(owed0) * protocolFeeBps) / 10_000;
+        uint256 creator0 = uint256(owed0) - protocol0;
+
+        uint256 creatorUsdcFromToken;
+        uint256 protocolUsdcFromToken;
+
+        if (burning) {
+            // Burn the creator's token-side fees outright. Selling them for USDC
+            // only to buy the same token straight back would pay the pool fee and
+            // slippage twice to reach the same place, burning ~2% less than just
+            // destroying them. The treasury's share is still converted, because
+            // the treasury is owed money rather than supply reduction.
+            if (creator0 > 0) {
+                LaunchToken(l.token).burn(creator0);
+                launches[idxPlusOne - 1].tokensBurned += creator0;
+                emit BoughtBackAndBurned(l.token, 0, creator0);
+                creator0 = 0;
+            }
+            if (protocol0 >= MIN_FEE_SWAP) {
+                (uint256 soldP, uint256 gotP) = _sellFeesForUsdc(l, protocol0);
+                protocolUsdcFromToken = gotP;
+                protocol0 -= soldP;
+            }
+        } else if (uint256(owed0) >= MIN_FEE_SWAP) {
+            // One swap for the whole token side, then split the proceeds.
+            (uint256 sold, uint256 got) = _sellFeesForUsdc(l, uint256(owed0));
+            protocolUsdcFromToken = (got * protocolFeeBps) / 10_000;
+            creatorUsdcFromToken = got - protocolUsdcFromToken;
+
+            uint256 unsold = uint256(owed0) - sold;
+            protocol0 = (unsold * protocolFeeBps) / 10_000;
+            creator0 = unsold - protocol0;
         }
 
-        uint256 totalUsdc = uint256(owed1) + usdcFromToken;
-
-        uint256 protocol0 = (unsoldToken * protocolFeeBps) / 10_000;
-        uint256 protocol1 = (totalUsdc * protocolFeeBps) / 10_000;
-        uint256 creator0 = unsoldToken - protocol0;
-        uint256 creator1 = totalUsdc - protocol1;
+        uint256 protocol1 = (uint256(owed1) * protocolFeeBps) / 10_000 + protocolUsdcFromToken;
+        uint256 creator1 = (uint256(owed1) - (uint256(owed1) * protocolFeeBps) / 10_000) + creatorUsdcFromToken;
 
         // Anything the swap could not clear -- a pool out of range, or a balance
         // below MIN_FEE_SWAP -- is paid in kind rather than stranded. This is the
@@ -446,7 +467,7 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
 
         // USDC-side fees follow the mode chosen at launch.
         if (creator1 > 0) {
-            if (l.buybackAndBurn && _canBuyBack(l)) {
+            if (burning) {
                 _buybackAndBurn(idxPlusOne - 1, creator1);
             } else if (LaunchToken(l.token).rewardsEnabled()) {
                 IERC20(USDC).safeTransfer(l.token, creator1);

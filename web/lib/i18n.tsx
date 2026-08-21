@@ -135,7 +135,7 @@ const STRINGS = {
 
   "field.fees": { en: "Who earns the swap fees", ja: "取引手数料の受取先" },
   "fees.creator.t": { en: "You keep them", ja: "自分が受け取る" },
-  "fees.creator.b": { en: "Fees accrue to you as USDC and tokens, claimable any time.", ja: "USDCとトークンで手数料が蓄積され、いつでも請求できます。" },
+  "fees.creator.b": { en: "Fees accrue to you as USDC, claimable any time.", ja: "USDCで手数料が蓄積され、いつでも請求できます。" },
   "fees.holders.t": { en: "Holders earn", ja: "保有者に分配" },
   "fees.holders.b": { en: "Fees become USDC that every holder claims pro-rata. Cashable.", ja: "手数料はUSDCとなり、保有量に応じて全保有者が請求できます。換金可能です。" },
   "fees.redirect.t": { en: "Send them to a project", ja: "プロジェクトに寄付" },
