@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { wagmiConfig } from "@/lib/wagmi";
 import { chain, PRIVY_APP_ID, WALLETCONNECT_PROJECT_ID } from "@/lib/config";
 import { I18nProvider } from "@/lib/i18n";
+import { EnsureEmbeddedWallet } from "@/components/EnsureWallet";
 
 export function Providers({ children }: { children: ReactNode }) {
   // One client per mount, so SSR and client never share cache instances.
@@ -28,6 +29,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       {/* WagmiProvider must sit inside both PrivyProvider and the query client. */}
       <WagmiProvider config={wagmiConfig}>
+        <EnsureEmbeddedWallet />
         <I18nProvider>{children}</I18nProvider>
       </WagmiProvider>
     </QueryClientProvider>
