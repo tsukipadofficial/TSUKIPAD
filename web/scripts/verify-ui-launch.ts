@@ -109,6 +109,8 @@ async function main() {
         rewardHolders: false,
         feeRecipient: "0x0000000000000000000000000000000000000000",
         buybackAndBurn: false,
+        recipientCommitment: ("0x" + "0".repeat(64)) as `0x${string}`,
+        referrer: "0x0000000000000000000000000000000000000000" as `0x${string}`,
       },
     ],
   });

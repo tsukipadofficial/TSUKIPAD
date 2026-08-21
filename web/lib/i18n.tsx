@@ -405,6 +405,19 @@ const STRINGS = {
     en: "I'm #{rank} on the @tsukipad_ waitlist.\n\nFair-launch tokens straight into a Uniswap V3 USDC pool on Arc Network. $3,000 opening market cap, 100% of supply becomes the liquidity, LP burned on launch.\n\ntsukipad.com",
     ja: "@tsukipad_ のウェイトリストで{rank}位です。\n\nArc Network上のUniswap V3 USDCプールへ直接フェアローンチ。時価総額$3,000から、供給量の100%が流動性に、LPはローンチ時にバーン。\n\ntsukipad.com",
   },
+  // --- uncollected fees -------------------------------------------------
+  "fees.title": { en: "Uncollected fees", ja: "未回収の手数料" },
+  "fees.loading": { en: "Reading the pool…", ja: "プールを読込中…" },
+  "fees.row.creator": { en: "Creator", ja: "発行者" },
+  "fees.row.referrer": { en: "Referrer", ja: "紹介者" },
+  "fees.row.protocol": { en: "Protocol", ja: "プロトコル" },
+  "fees.you": { en: "you", ja: "あなた" },
+  "fees.anyone": {
+    en: "Anyone can collect. Whoever presses it pays the gas; the fees always go to the addresses recorded at launch.",
+    ja: "誰でも回収できます。押した人がガス代を払い、手数料は必ずローンチ時に記録されたアドレスへ送られます。",
+  },
+  "fees.collect": { en: "Collect fees", ja: "手数料を回収" },
+  "fees.collecting": { en: "Collecting…", ja: "回収中…" },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;

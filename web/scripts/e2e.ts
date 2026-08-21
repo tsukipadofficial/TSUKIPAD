@@ -83,6 +83,8 @@ async function main() {
       tickLower, tickUpper, creatorAllocationBps: ALLOCATION_BPS,
       rewardHolders: false, feeRecipient: "0x0000000000000000000000000000000000000000",
       buybackAndBurn: false,
+        recipientCommitment: ("0x" + "0".repeat(64)) as `0x${string}`,
+        referrer: "0x0000000000000000000000000000000000000000" as `0x${string}`,
     }],
   });
   let rc = await pub.waitForTransactionReceipt({ hash });

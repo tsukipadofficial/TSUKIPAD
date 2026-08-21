@@ -11,6 +11,7 @@ import { TradePanel } from "./TradePanel";
 import { RewardsPanel } from "./RewardsPanel";
 import { CreatorLockPanel } from "./CreatorLockPanel";
 import { BurnPanel } from "./BurnPanel";
+import { FeesPanel } from "./FeesPanel";
 import { useLaunch } from "@/lib/hooks";
 import { useTrades } from "@/lib/useTrades";
 import { EXPLORER_URL, isDeployed } from "@/lib/config";
@@ -320,6 +321,8 @@ export function TokenView({ token }: { token: Address }) {
         {/* ---------------- right ---------------- */}
         <div className="space-y-4 lg:sticky lg:top-24">
           <TradePanel launch={launch} />
+
+          <FeesPanel launch={launch} />
 
           <RewardsPanel launch={launch} />
 

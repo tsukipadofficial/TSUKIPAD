@@ -9,6 +9,7 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
+import { EMPTY_COMMITMENT, storedReferrer } from "@/lib/referral";
 
 import { Badge, Button, Card, Stat, cx } from "@/components/ui";
 import { CurvePreview } from "@/components/CurvePreview";
@@ -181,6 +182,11 @@ export default function CreatePage() {
               ? (feeRecipientInput.trim() as Address)
               : zeroAddress,
             buybackAndBurn: burning,
+            // Earmarking fees for an identity is not wired into this form yet;
+            // a launch made here always names a concrete recipient or nobody.
+            recipientCommitment: EMPTY_COMMITMENT,
+            // Carried from ?ref= if the creator arrived through someone's link.
+            referrer: storedReferrer(),
           },
         ],
       });
