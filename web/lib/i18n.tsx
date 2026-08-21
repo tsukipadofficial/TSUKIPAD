@@ -374,8 +374,26 @@ const STRINGS = {
   // --- waitlist share ---------------------------------------------------
   "wl.share": { en: "Spread the word", ja: "広めてください" },
   "wl.shareBody": {
-    en: "Posting is what actually gets a launch seen. We cannot verify a repost, so this is not gated — but it is the single most useful thing you can do here.",
-    ja: "投稿こそが最も効果的です。リポストの検証はできないため必須にはしていませんが、ここで最も役立つ行動です。",
+    en: "Post about the launch, then paste the link. We check who wrote it, so only your own post counts.",
+    ja: "ローンチについて投稿し、そのリンクを貼ってください。投稿者を確認するため、自分の投稿のみ有効です。",
+  },
+  "wl.postUrl": { en: "https://x.com/you/status/…", ja: "https://x.com/you/status/…" },
+  "wl.verifyPost": { en: "Verify post", ja: "投稿を確認" },
+  "wl.verifying": { en: "Checking…", ja: "確認中…" },
+  "wl.posted": { en: "Post verified", ja: "投稿を確認しました" },
+  "wl.errPostBadUrl": { en: "That is not an X post link.", ja: "Xの投稿リンクではありません。" },
+  "wl.errPostNotFound": { en: "We could not find that post.", ja: "その投稿が見つかりません。" },
+  "wl.errPostWrongAuthor": {
+    en: "That post was written by a different account than the handle you claimed.",
+    ja: "その投稿は、登録したハンドルとは別のアカウントによるものです。",
+  },
+  "wl.errPostNoMention": {
+    en: "That post does not mention @tsukipad_.",
+    ja: "その投稿に @tsukipad_ が含まれていません。",
+  },
+  "wl.errPostUnavailable": {
+    en: "X did not answer. Try again in a moment.",
+    ja: "Xから応答がありません。少し後に再試行してください。",
   },
   "wl.follow": { en: "Follow @tsukipad_", ja: "@tsukipad_ をフォロー" },
   "wl.post": { en: "Post your place", ja: "順位を投稿" },

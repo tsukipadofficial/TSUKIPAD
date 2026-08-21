@@ -9,7 +9,7 @@ import { useI18n } from "@/lib/i18n";
 import { signMessage, normaliseHandle } from "@/lib/waitlist";
 import { STORAGE_PREFIX, X_HANDLE } from "@/lib/brand";
 
-type BoardRow = { rank: number; display: string; clearance: 50 | 100 };
+type BoardRow = { rank: number; display: string; clearance: 50 | 100; posted?: boolean };
 type Board = { total: number; board: BoardRow[]; configured: boolean };
 
 const SAVED = `${STORAGE_PREFIX}:wl:handle`;
@@ -37,8 +37,10 @@ export default function WaitlistPage() {
   const [handle, setHandle] = useState("");
   const [claimed, setClaimed] = useState<string | null>(null);
   const [verified, setVerified] = useState(false);
+  const [posted, setPosted] = useState(false);
+  const [postUrl, setPostUrl] = useState("");
   const [rank, setRank] = useState<number | null>(null);
-  const [busy, setBusy] = useState<"join" | "sign" | null>(null);
+  const [busy, setBusy] = useState<"join" | "sign" | "post" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<Board>({ total: 0, board: [], configured: true });
 
@@ -60,6 +62,7 @@ export default function WaitlistPage() {
         if (mine) {
           setRank(mine.rank);
           setVerified(mine.clearance === 100);
+          setPosted(Boolean(mine.posted));
         }
       }
     } catch {
@@ -80,6 +83,11 @@ export default function WaitlistPage() {
       "address-taken": t("wl.errTaken"),
       "rate-limited": t("wl.errRate"),
       "waitlist-unavailable": t("wl.unavailable"),
+      "post-bad-url": t("wl.errPostBadUrl"),
+      "post-not-found": t("wl.errPostNotFound"),
+      "post-wrong-author": t("wl.errPostWrongAuthor"),
+      "post-no-mention": t("wl.errPostNoMention"),
+      "post-unavailable": t("wl.errPostUnavailable"),
     })[code] ?? t("wl.errGeneric");
 
   async function post(body: Record<string, unknown>) {
@@ -90,7 +98,7 @@ export default function WaitlistPage() {
     });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error ?? "unknown");
-    return j as { handle: string; clearance: 50 | 100; rank: number | null };
+    return j as { handle: string; clearance: 50 | 100; rank: number | null; posted: boolean };
   }
 
   async function join() {
@@ -103,6 +111,21 @@ export default function WaitlistPage() {
       localStorage.setItem(SAVED, j.handle);
       setClaimed(j.handle);
       setRank(j.rank);
+      void refresh();
+    } catch (e) {
+      setError(msg((e as Error).message));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function submitPost() {
+    if (!claimed || !postUrl.trim()) return;
+    setError(null);
+    setBusy("post");
+    try {
+      await post({ handle: claimed, postUrl: postUrl.trim() });
+      setPosted(true);
       void refresh();
     } catch (e) {
       setError(msg((e as Error).message));
@@ -244,7 +267,10 @@ export default function WaitlistPage() {
           data.board.map((r) => (
             <div key={r.rank} className="flex items-center gap-4 px-5 py-2.5">
               <span className="w-10 shrink-0 font-mono text-xs text-faint">{r.rank}</span>
-              <span className="flex-1 truncate font-mono text-sm text-ink">@{r.display}</span>
+              <span className="flex-1 truncate font-mono text-sm text-ink">
+                @{r.display}
+                {r.posted && <span className="ml-2 text-pink" title="posted about us">✦</span>}
+              </span>
               <span
                 className={cx(
                   "font-mono text-xs",
@@ -264,7 +290,7 @@ export default function WaitlistPage() {
           <div className="flex items-center gap-3">
             <span className="font-mono text-sm text-pink">03</span>
             <h2 className="text-xl font-bold">{t("wl.share")}</h2>
-            <span className="ml-auto font-mono text-xs text-faint">optional</span>
+            {posted && <span className="ml-auto font-mono text-xs text-lime">✓ {t("wl.posted")}</span>}
           </div>
           <p className="mt-2 max-w-2xl text-sm text-muted">{t("wl.shareBody")}</p>
           <div className="mt-4 flex flex-wrap gap-3">
@@ -285,6 +311,27 @@ export default function WaitlistPage() {
               <Button variant="pink">{t("wl.post")}</Button>
             </a>
           </div>
+          {!posted && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <div className="flex min-w-[280px] flex-1 items-center border-2 border-line bg-void px-3">
+                <input
+                  value={postUrl}
+                  onChange={(e) => setPostUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && void submitPost()}
+                  placeholder={t("wl.postUrl")}
+                  spellCheck={false}
+                  className="w-full bg-transparent px-1 py-2.5 font-mono text-sm text-ink outline-none placeholder:text-faint"
+                />
+              </div>
+              <Button
+                variant="ghost"
+                disabled={busy !== null || !postUrl.trim()}
+                onClick={() => void submitPost()}
+              >
+                {busy === "post" ? t("wl.verifying") : t("wl.verifyPost")}
+              </Button>
+            </div>
+          )}
         </Card>
       )}
 

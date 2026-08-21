@@ -14,6 +14,9 @@ export type Entry = {
   address: string | null;
   createdAt: number;
   verifiedAt: number | null;
+  /// Set when the account posted about us and we confirmed authorship.
+  postedAt: number | null;
+  postUrl: string | null;
 };
 
 export const K = {

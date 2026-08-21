@@ -9,6 +9,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { cmd, pipeline, redisConfigured } from "@/lib/redis";
+import { verifyPost } from "@/lib/xpost";
+import { X_HANDLE } from "@/lib/brand";
 import {
   Entry,
   K,
@@ -48,6 +50,7 @@ export async function GET() {
       rank: i + 1,
       display: e.display,
       clearance: clearance(e),
+      posted: Boolean(e.postedAt),
     }));
   const total = Number(await cmd<number>("GET", K.count)) || board.length;
   return NextResponse.json({ ok: true, total, board, configured: true });
@@ -56,7 +59,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   if (!redisConfigured) return bad("waitlist-unavailable", 503);
 
-  let body: { handle?: string; address?: string; signature?: string };
+  let body: { handle?: string; address?: string; signature?: string; postUrl?: string };
   try {
     body = await req.json();
   } catch {
@@ -88,6 +91,15 @@ export async function POST(req: NextRequest) {
     if (owner && owner !== key) return bad("address-taken", 409);
   }
 
+  // Posting is verified by authorship: the syndication endpoint reports who
+  // wrote the tweet, so claiming someone else's post fails.
+  let posted: { at: number; url: string } | null = null;
+  if (body.postUrl) {
+    const check = await verifyPost(body.postUrl, handle, X_HANDLE);
+    if (!check.ok) return bad(`post-${check.reason}`);
+    posted = { at: Date.now(), url: body.postUrl.trim() };
+  }
+
   const existingRaw = await cmd<string | null>("GET", K.entry(key));
   const now = Date.now();
   const existing = existingRaw ? (JSON.parse(existingRaw) as Entry) : null;
@@ -98,6 +110,8 @@ export async function POST(req: NextRequest) {
         display: existing.display,
         address: address ?? existing.address,
         verifiedAt: address ? (existing.verifiedAt ?? now) : existing.verifiedAt,
+        postedAt: posted ? (existing.postedAt ?? posted.at) : existing.postedAt,
+        postUrl: posted ? posted.url : existing.postUrl,
       }
     : {
         handle: key,
@@ -105,6 +119,8 @@ export async function POST(req: NextRequest) {
         address,
         createdAt: now,
         verifiedAt: address ? now : null,
+        postedAt: posted ? posted.at : null,
+        postUrl: posted ? posted.url : null,
       };
 
   const writes: (string | number)[][] = [["SET", K.entry(key), JSON.stringify(entry)]];
@@ -120,6 +136,7 @@ export async function POST(req: NextRequest) {
     ok: true,
     handle: entry.display,
     clearance: clearance(entry),
+    posted: Boolean(entry.postedAt),
     rank: rank === null ? null : rank + 1,
     isNew: !existing,
   });
