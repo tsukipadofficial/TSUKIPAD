@@ -26,6 +26,9 @@ const STRINGS = {
   "nav.connect": { en: "Sign in", ja: "サインイン" },
   "nav.connecting": { en: "Connecting…", ja: "接続中…" },
   "nav.switchToArc": { en: "Switch to Arc", ja: "Arcに切替" },
+  "nav.copyAddress": { en: "Click to copy full address", ja: "クリックで全アドレスをコピー" },
+  "nav.copied": { en: "Copied", ja: "コピーしました" },
+  "nav.signOut": { en: "Sign out", ja: "サインアウト" },
   "nav.explorer": { en: "Explorer", ja: "エクスプローラ" },
 
   "footer.chain": { en: "Built on Arc Network · Arc Testnet · chain 5042002", ja: "Arc Network上に構築 · Arcテストネット · チェーン 5042002" },

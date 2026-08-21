@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAccount, useReadContract, useSwitchChain } from "wagmi";
@@ -29,6 +30,20 @@ export function Header() {
   const { switchChain } = useSwitchChain();
 
   const wrongNetwork = isConnected && chainId !== chain.id;
+  const [copied, setCopied] = useState(false);
+
+  // A truncated address cannot be pasted into a faucet or a block explorer,
+  // which is most of what anyone wants it for on a testnet.
+  async function copyAddress() {
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked (insecure context or denied) -- title still shows it */
+    }
+  }
 
   const { data: usdcBalance } = useReadContract({
     address: USDC_ADDRESS,
@@ -108,10 +123,28 @@ export function Header() {
               {t("nav.switchToArc")}
             </Button>
           ) : authenticated && address ? (
-            <Button variant="ghost" size="sm" onClick={() => void logout()}>
-              {/* btn-brut uppercases its label, which would render 0x as 0X. */}
-              <span className="tabular normal-case">{shortAddress(address)}</span>
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void copyAddress()}
+                title={`${address} — ${t("nav.copyAddress")}`}
+              >
+                {/* btn-brut uppercases its label, which would render 0x as 0X. */}
+                <span className={cx("tabular normal-case", copied && "text-lime")}>
+                  {copied ? t("nav.copied") : shortAddress(address)}
+                </span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void logout()}
+                title={t("nav.signOut")}
+                aria-label={t("nav.signOut")}
+              >
+                <span className="normal-case">×</span>
+              </Button>
+            </div>
           ) : (
             <Button size="sm" disabled={!ready} onClick={() => login()}>
               {ready ? t("nav.connect") : t("nav.connecting")}
