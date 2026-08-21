@@ -1,5 +1,5 @@
 import { arcTestnet } from "viem/chains";
-import type { Address } from "viem";
+import type { Address, Chain } from "viem";
 
 /// Arc's USDC ERC20 interface. Note the decimals trap documented by Arc: the
 /// *native* gas balance carries 18 decimals while this ERC20 view carries 6.
@@ -13,12 +13,23 @@ export const TOKEN_DECIMALS = 18;
 export const POOL_FEE = 10_000;
 export const TICK_SPACING = 200;
 
-export const chain = arcTestnet;
-
 /// Docs list rpc.testnet.arc.io; viem ships rpc.testnet.arc.network. Both resolve
 /// to the same chain, and this is overridable for local anvil work.
 export const RPC_URL =
   process.env.NEXT_PUBLIC_RPC_URL ?? "https://rpc.testnet.arc.io";
+
+/// The chain, with its RPC pinned to RPC_URL.
+///
+/// Consumers that take a viem Chain rather than a transport -- Privy, and so
+/// the embedded wallet it signs with -- would otherwise use whatever endpoint
+/// viem ships, while wagmi used ours. One endpoint everywhere means one set of
+/// limits and one thing to check when a transaction misbehaves.
+export const chain = {
+  ...arcTestnet,
+  rpcUrls: {
+    default: { http: [RPC_URL] },
+  },
+} as const satisfies Chain;
 
 /// Privy app id. Public by design -- it identifies the app to Privy's client
 /// SDK. The *app secret* is server-side only and must never appear here.
