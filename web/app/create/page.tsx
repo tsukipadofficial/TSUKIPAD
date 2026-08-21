@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { usePrivy } from "@privy-io/react-auth";
 import { parseUnits, decodeEventLog, isAddress, zeroAddress, type Address, type Hex } from "viem";
 import {
   useAccount,
@@ -9,7 +10,7 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { EMPTY_COMMITMENT, storedReferrer } from "@/lib/referral";
+import { EMPTY_COMMITMENT, accountReferrer } from "@/lib/referral";
 import { PROVIDERS, commitmentFor, labelFor, type Provider } from "@/lib/commitment";
 
 import { Badge, Button, Card, Stat, cx } from "@/components/ui";
@@ -46,6 +47,7 @@ export default function CreatePage() {
   const t = useT();
   const router = useRouter();
   const { address, isConnected, chainId } = useAccount();
+  const { getAccessToken } = usePrivy();
   const publicClient = usePublicClient();
 
   const [name, setName] = useState("");
@@ -154,6 +156,10 @@ export default function CreatePage() {
     setError(null);
     setMining(true);
     try {
+      // Resolved here rather than read from localStorage: the account copy is
+      // the one that survives launching from a different device to the click.
+      const referrer = await accountReferrer(await getAccessToken().catch(() => null));
+
       const cleanName = name.trim();
       const cleanSymbol = symbol.trim().toUpperCase();
 
@@ -196,7 +202,7 @@ export default function CreatePage() {
             // a launch made here always names a concrete recipient or nobody.
             recipientCommitment: commitment ?? EMPTY_COMMITMENT,
             // Carried from ?ref= if the creator arrived through someone's link.
-            referrer: storedReferrer(),
+            referrer,
           },
         ],
       });

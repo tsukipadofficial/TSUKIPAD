@@ -1,15 +1,30 @@
 "use client";
 
-import { useEffect } from "react";
-import { rememberReferrer } from "@/lib/referral";
+import { useEffect, useRef } from "react";
+import { usePrivy } from "@privy-io/react-auth";
+import { bindReferrer, rememberReferrer } from "@/lib/referral";
 
-/// Records a `?ref=` the moment someone arrives, before they navigate away.
+/// Records a `?ref=` on arrival, then binds it to the account once signed in.
 ///
-/// Reads location directly rather than useSearchParams so it needs no Suspense
-/// boundary, and runs once per mount because first touch wins.
+/// The browser copy is only a staging area. A link opened on a phone and a
+/// launch made on a laptop are the same person to Privy and two different
+/// browsers to localStorage, so the account is what the referral ends up on.
 export function ReferralCapture() {
+  const { authenticated, getAccessToken } = usePrivy();
+  const bound = useRef(false);
+
   useEffect(() => {
     rememberReferrer(new URLSearchParams(window.location.search).get("ref"));
   }, []);
+
+  useEffect(() => {
+    if (!authenticated || bound.current) return;
+    bound.current = true;
+    void (async () => {
+      const token = await getAccessToken();
+      if (token) await bindReferrer(token);
+    })();
+  }, [authenticated, getAccessToken]);
+
   return null;
 }
