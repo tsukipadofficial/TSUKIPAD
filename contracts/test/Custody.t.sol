@@ -223,4 +223,77 @@ contract CustodyTest is Test {
             "allocation plus escrow still fully backed"
         );
     }
+
+    /// @dev The sharpest case, and the one worth stating plainly: a creator with
+    ///      tokens still locked earns fees on the same launch. Those fees are
+    ///      paid in USDC, and paying them involves selling that very token --
+    ///      the same token the launchpad is holding on that creator's behalf.
+    ///
+    ///      The two must not touch. The USDC owed to the creator comes from fees
+    ///      the pool accrued; the tokens held for the creator are theirs and stay
+    ///      whole until the lock expires.
+    function test_creatorEarnsUsdcWhileTheirOwnTokensStayLocked() public {
+        LaunchToken token = _launch("Locked Earner", "LERN", 1_000, bytes32(0));
+
+        uint256 locked = launchpad.launchOf(address(token)).creatorAllocation;
+        uint256 tokensAtLaunch = IERC20(address(token)).balanceOf(creator); // mint dust only
+        assertGt(locked, 0, "creator has tokens locked");
+        assertEq(IERC20(address(token)).balanceOf(address(launchpad)), locked, "held exactly");
+
+        // Trade hard, then collect. Collection sells this launch's token fees.
+        for (uint256 i = 0; i < 3; i++) {
+            _churn(address(token), 40_000e6);
+            launchpad.collectFees(address(token));
+
+            assertEq(
+                IERC20(address(token)).balanceOf(address(launchpad)),
+                locked,
+                "locked allocation is exactly as it was, mid-flight"
+            );
+        }
+
+        console2.log("creator USDC from fees (6dp):", usdc.balanceOf(creator));
+        console2.log("creator tokens still locked:  ", locked);
+
+        assertGt(usdc.balanceOf(creator), 0, "creator was paid, in USDC");
+        assertEq(
+            IERC20(address(token)).balanceOf(creator),
+            tokensAtLaunch,
+            "and received no tokens: the fee side never came out in kind"
+        );
+        assertEq(IERC20(address(token)).balanceOf(address(launchpad)), locked, "lock still whole after fees");
+
+        // The lock then releases in full, untouched by any of it.
+        vm.warp(block.timestamp + 31 minutes);
+        launchpad.claimCreatorAllocation(address(token));
+        assertEq(
+            IERC20(address(token)).balanceOf(creator) - tokensAtLaunch,
+            locked,
+            "creator receives every locked token"
+        );
+        assertEq(IERC20(address(token)).balanceOf(address(launchpad)), 0, "nothing of theirs left behind");
+    }
+
+    /// @dev And the same again with a second creator's lock sitting alongside, so
+    ///      one creator's fees can never be paid out of another creator's lock.
+    function test_oneCreatorsFeesNeverTouchAnothersLock() public {
+        LaunchToken mine = _launch("Mine", "MINE", 1_000, bytes32(0));
+        LaunchToken theirs = _launch("Theirs", "THRS", 2_000, bytes32(0));
+
+        uint256 theirLock = launchpad.launchOf(address(theirs)).creatorAllocation;
+        assertGt(theirLock, 0, "the other lock exists");
+
+        for (uint256 i = 0; i < 3; i++) {
+            _churn(address(mine), 40_000e6);
+            launchpad.collectFees(address(mine));
+            assertEq(
+                IERC20(address(theirs)).balanceOf(address(launchpad)),
+                theirLock,
+                "the other creator's lock never moves"
+            );
+        }
+
+        assertGt(usdc.balanceOf(creator), 0, "fees were paid out");
+        assertEq(IERC20(address(theirs)).balanceOf(address(launchpad)), theirLock, "still whole at the end");
+    }
 }
