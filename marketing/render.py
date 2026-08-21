@@ -224,11 +224,11 @@ def scene_mechanism(im, d, t):                    # bars 5-6 (8-12s)
     a1 = out_back(clamp(t / 0.55))
     bw, bh = 460, 300
     x0 = W/2 - 620
-    if t > 0.02:
+    if True:
         brut(d, [x0, cy - bh/2, x0 + bw, cy + bh/2], fill=SURFACE, border=LINEBR, off=int(10*a1))
-        label(d, x0 + 34, cy - bh/2 + 30, 'COST TO LAUNCH')
+        label(d, x0 + 34, cy - bh/2 + 30, 'OPENS AT')
         f = sg(110); ctext(d, x0 + bw/2, cy + 18, '$3,000', f, fill=INK, anchor_mid=True)
-        ctext(d, x0 + bw/2, cy + 96, 'IN USDC', jbr(26), fill=FAINT, anchor_mid=True)
+        ctext(d, x0 + bw/2, cy + 96, 'USDC MARKET CAP', jbr(26), fill=FAINT, anchor_mid=True)
     # arrow
     if t > 0.62:
         ln = int(240 * out_expo((t - 0.62) / 0.5))
@@ -257,11 +257,11 @@ def scene_mechanism(im, d, t):                    # bars 5-6 (8-12s)
         w = int(560 * a)
         d.rectangle([W/2 - w/2, cy + 330, W/2 + w/2, cy + 334], fill=LINE)
         if t > 3.05:
-            ctext(d, W/2, cy + 392, 'LIQUIDITY LOCKED THE MOMENT IT LANDS',
+            ctext(d, W/2, cy + 392, 'YOU PAY NOTHING. 100% OF SUPPLY IS THE LIQUIDITY.',
                   jb(34), fill=mix(VOID, LIME, out_expo((t - 3.05) / 0.5)), anchor_mid=True)
 
 TILES = [('SINGLE-SIDED', 'you supply one side.\nthe curve supplies\nthe rest.', CYAN),
-         ('COSTS YOU NOTHING', 'liquidity comes from\nthe raise, not from\nyour pocket.', LIME),
+         ('COSTS YOU NOTHING', 'your entire supply\nbecomes the liquidity.\nyou pay nothing.', LIME),
          ('LOCKED FOREVER',   'LP tokens burned\non launch. nobody\ncan pull it. ever.', PINK)]
 def scene_tiles(im, d, t):                        # bars 7-8 (12-16s)
     tw, th = 500, 400; gap = 46
