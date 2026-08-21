@@ -15,6 +15,7 @@ import { useI18n } from "@/lib/i18n";
 const NAV = [
   { href: "/", key: "nav.board" as const },
   { href: "/create", key: "nav.launch" as const },
+  { href: "/waitlist", key: "nav.waitlist" as const },
 ];
 
 export function Header() {
