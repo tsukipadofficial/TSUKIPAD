@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useReadContract } from "wagmi";
 import Link from "next/link";
-import { zeroAddress } from "viem";
+import { zeroAddress, zeroHash } from "viem";
 import type { Address } from "viem";
 
 import { Badge, Button, Card, CurveBar, LiveDot, Skeleton, Stat, cx } from "./ui";
@@ -38,6 +38,20 @@ export function TokenView({ token }: { token: Address }) {
     args: [token],
     query: { enabled: isDeployed, refetchInterval: 30_000 },
   });
+  // Whether the launch earmarked its fees for a social account. Without this the
+  // page cannot tell a *claimed earmark* (fees now flow to the handle's proven
+  // wallet) from a *redirect* (creator deliberately gave the fees away) -- both
+  // have feeRecipient != creator, and the page was calling the first one the
+  // second, telling every visitor "the creator takes nothing from this launch"
+  // about a launch whose creator had just claimed it.
+  const { data: commitment } = useReadContract({
+    address: LAUNCHPAD_ADDRESS,
+    abi: launchpadAbi,
+    functionName: "recipientCommitment",
+    args: [token],
+    query: { enabled: isDeployed, refetchInterval: 60_000 },
+  });
+
   const { trades, isLoading: tradesLoading } = useTrades(launch?.pool);
 
   const meta = useMemo(
@@ -99,15 +113,33 @@ export function TokenView({ token }: { token: Address }) {
     );
   }
 
+  // A launch that named a social account carries a non-zero commitment for its
+  // whole life -- claiming does not clear it. That makes the commitment the only
+  // reliable way to tell the three fee destinations apart.
+  // Until the read lands the launch's category is genuinely unknown, and
+  // guessing prints "the creator takes nothing from this launch" for a frame on
+  // every page load. Both panels stay hidden rather than flash the wrong one.
+  const commitmentKnown = commitment !== undefined;
+  const wasEarmarked = commitmentKnown && commitment !== zeroHash;
+
   // An earmarked launch has no recipient at all until somebody proves the
   // account is theirs, so its recipient is the zero address by construction.
   const earmarked = launch.feeRecipient === zeroAddress;
 
-  // A launch is "redirected" when fees go somewhere other than the launcher --
-  // but an earmark is not a destination yet, and printing 0x0000…0000 as the
-  // place fees are "sent to" reads like they are being burned.
+  // The earmark has been claimed: fees now flow to the wallet the named account
+  // proved it controls. This is the creator being paid, not the creator giving
+  // the money away, so it must not borrow the redirect copy.
+  const claimedEarmark = wasEarmarked && !earmarked;
+
+  // A launch is genuinely "redirected" when the launcher chose to send fees to
+  // some other address outright. An earmark is not that -- neither before it is
+  // claimed (0x0000…0000 is not a destination) nor after (the recipient is the
+  // named account itself).
   const redirected =
-    !earmarked && launch.feeRecipient.toLowerCase() !== launch.creator.toLowerCase();
+    commitmentKnown &&
+    !earmarked &&
+    !wasEarmarked &&
+    launch.feeRecipient.toLowerCase() !== launch.creator.toLowerCase();
   const funds = beneficiaryLink(meta.fundsLabel);
 
   const allocationLocked =
@@ -336,7 +368,9 @@ export function TokenView({ token }: { token: Address }) {
                         // through to "collected by the creator" -- the one
                         // thing an earmarked launch definitely does not do.
                         ? t("facts.fees.earmarked")
-                        : redirected
+                        : claimedEarmark
+                          ? t("facts.fees.claimed", { addr: shortAddress(launch.feeRecipient) })
+                          : redirected
                           ? t("facts.fees.redirect", { addr: shortAddress(launch.feeRecipient) })
                           : t("facts.fees.creator")
                 }
@@ -370,6 +404,29 @@ export function TokenView({ token }: { token: Address }) {
               <Link href="/claim" className="mt-3 inline-block">
                 <Button variant="ghost" size="sm">{t("token.earmarkedCta")}</Button>
               </Link>
+            </Card>
+          ) : null}
+
+          {/* A claimed earmark gets its own panel. It is the opposite of a
+              redirect -- the named account proved a wallet and is now being paid
+              -- so it is deliberately lime rather than pink. */}
+          {claimedEarmark ? (
+            <Card className="border-lime p-4">
+              <p className="eyebrow mb-2 text-lime">{t("claimed.title")}</p>
+              <p className="text-xs leading-relaxed text-muted">{t("claimed.body")}</p>
+              <a
+                href={`${EXPLORER_URL}/address/${launch.feeRecipient}`}
+                target="_blank"
+                rel="noreferrer"
+                className="tabular mt-2 block text-sm font-bold text-lime underline-offset-4 hover:underline"
+              >
+                {shortAddress(launch.feeRecipient)}
+              </a>
+              {funds ? (
+                <p className="mt-2 text-xs text-muted">
+                  {t("claimed.by", { target: funds.text })}
+                </p>
+              ) : null}
             </Card>
           ) : null}
 

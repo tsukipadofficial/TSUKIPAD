@@ -273,6 +273,7 @@ const STRINGS = {
   "facts.fees.holders": { en: "Shared with holders as claimable USDC", ja: "USDCとして保有者に分配" },
   "facts.fees.creator": { en: "Collected by the creator", ja: "発行者が受領" },
   "facts.fees.earmarked": { en: "Held for a named account until claimed", ja: "指定アカウントが受け取るまで保管" },
+  "facts.fees.claimed": { en: "Sent to the claimed account at {addr}", ja: "受取済みアカウント {addr} へ送金" },
   "facts.fees.redirect": { en: "Sent to {addr}", ja: "{addr}へ送金" },
 
   "rug.title": { en: "Why this can't rug", ja: "ラグプルできない理由" },
@@ -336,6 +337,12 @@ const STRINGS = {
   // --- fee redirect ---------------------------------------------------
   "redirect.title": { en: "Where the fees go", ja: "手数料の送金先" },
   "redirect.body": { en: "The creator takes nothing from this launch. Trading fees are sent to:", ja: "発行者はこのトークンから収益を得ません。取引手数料は次の宛先に送られます：" },
+  "claimed.title": { en: "Fees claimed", ja: "手数料の受取先（確定）" },
+  "claimed.body": {
+    en: "The account this launch earmarked its fees for has proved ownership of a wallet. Every future fee goes straight there:",
+    ja: "このローンチが指定したアカウントがウォレットの所有を証明しました。以降の手数料はこのアドレスに直接送られます：",
+  },
+  "claimed.by": { en: "claimed by {target}", ja: "{target} が受取済み" },
   "redirect.claimed": {
     en: "Claimed to fund {target}. Nobody can prove a social account owns a wallet — verify the address yourself before trusting the claim.",
     ja: "{target}への支援を表明しています。SNSアカウントとウォレットの所有関係は証明できないため、アドレスをご自身でご確認ください。",

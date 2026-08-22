@@ -44,7 +44,10 @@ async function main() {
 
   const image = readFileSync("/tmp/nft.webp").toString("base64");
   const metadataURI = encodeMetadata({
-    description: "Never Fucking Trade. Fees earmarked for @tsukipad_, unclaimed.",
+    // Metadata is immutable, so it must never state a status that can change.
+    // The original text here said "unclaimed", which became a lie the moment
+    // the earmark was claimed -- and there is no way to edit it after launch.
+    description: "Never Fucking Trade. Fees are earmarked for @tsukipad_.",
     image: `data:image/webp;base64,${image}`,
     twitter: "@tsukipad_",
   });
