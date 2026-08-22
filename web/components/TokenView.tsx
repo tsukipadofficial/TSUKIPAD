@@ -331,9 +331,14 @@ export function TokenView({ token }: { token: Address }) {
                     ? t("facts.fees.burn")
                     : launch.rewardsEnabled
                       ? t("facts.fees.holders")
-                      : redirected
-                        ? t("facts.fees.redirect", { addr: shortAddress(launch.feeRecipient) })
-                        : t("facts.fees.creator")
+                      : earmarked
+                        // `redirected` excludes earmarks, so this branch fell
+                        // through to "collected by the creator" -- the one
+                        // thing an earmarked launch definitely does not do.
+                        ? t("facts.fees.earmarked")
+                        : redirected
+                          ? t("facts.fees.redirect", { addr: shortAddress(launch.feeRecipient) })
+                          : t("facts.fees.creator")
                 }
               />
             </dl>

@@ -272,6 +272,7 @@ const STRINGS = {
   "facts.fees": { en: "Swap fees", ja: "取引手数料" },
   "facts.fees.holders": { en: "Shared with holders as claimable USDC", ja: "USDCとして保有者に分配" },
   "facts.fees.creator": { en: "Collected by the creator", ja: "発行者が受領" },
+  "facts.fees.earmarked": { en: "Held for a named account until claimed", ja: "指定アカウントが受け取るまで保管" },
   "facts.fees.redirect": { en: "Sent to {addr}", ja: "{addr}へ送金" },
 
   "rug.title": { en: "Why this can't rug", ja: "ラグプルできない理由" },
