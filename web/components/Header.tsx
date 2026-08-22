@@ -24,13 +24,18 @@ const NAV = [
 export function Header() {
   const pathname = usePathname();
   const { t, lang, setLang } = useI18n();
-  const { address, isConnected, chainId } = useAccount();
+  const { address, chainId } = useAccount();
   // Privy owns sign-in now: email, Google, X, GitHub, Discord or an external
   // wallet, all funnelled into one modal.
   const { login, logout, ready, authenticated } = usePrivy();
   const { switchChain } = useSwitchChain();
 
-  const wrongNetwork = isConnected && chainId !== chain.id;
+  // Privy owns sign-in, so it is the only thing that decides whether somebody
+  // is signed in. wagmi can restore a connection from its own storage while
+  // Privy has not authenticated, and reading `isConnected` here put a balance
+  // next to a "Sign in" button.
+  const signedIn = authenticated && !!address;
+  const wrongNetwork = signedIn && chainId !== chain.id;
   const [copied, setCopied] = useState(false);
 
   // A truncated address cannot be pasted into a faucet or a block explorer,
@@ -51,7 +56,7 @@ export function Header() {
     abi: erc20Abi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    query: { enabled: !!address && !wrongNetwork, refetchInterval: 30_000 },
+    query: { enabled: signedIn && !wrongNetwork, refetchInterval: 30_000 },
   });
 
   return (
@@ -101,7 +106,7 @@ export function Header() {
             ))}
           </div>
 
-          {isConnected && !wrongNetwork ? (
+          {signedIn && !wrongNetwork ? (
             <a
               href={FAUCET_URL}
               target="_blank"
@@ -123,7 +128,7 @@ export function Header() {
             <Button variant="pink" size="sm" onClick={() => switchChain({ chainId: chain.id })}>
               {t("nav.switchToArc")}
             </Button>
-          ) : authenticated && address ? (
+          ) : signedIn ? (
             <div className="flex items-center gap-1.5">
               <Button
                 variant="ghost"
