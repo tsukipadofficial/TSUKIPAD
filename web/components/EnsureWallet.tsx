@@ -13,19 +13,25 @@ import { useAccount } from "wagmi";
 /// nothing for them to sign with. Creating one explicitly makes the behaviour
 /// independent of that setting.
 export function EnsureEmbeddedWallet() {
-  const { ready, authenticated } = usePrivy();
+  const { ready, authenticated, user } = usePrivy();
   const { ready: walletsReady, wallets } = useWallets();
   const { createWallet } = useCreateWallet();
   const { setActiveWallet } = useSetActiveWallet();
   const { isConnected } = useAccount();
   const attempted = useRef(false);
 
+  // Privy calls its own wallets "privy"; anything else is a browser extension
+  // or a mobile wallet the visitor already had.
+  const embedded = wallets.find((w) => w.walletClientType === "privy");
+
   useEffect(() => {
-    // walletsReady matters: before it flips, `wallets` is empty for everyone,
-    // and acting on that would mint a redundant wallet for people who already
-    // connected one.
+    // walletsReady matters: before it flips, `wallets` is empty for everyone.
     if (!ready || !authenticated || !walletsReady) return;
-    if (wallets.length > 0 || attempted.current) return;
+    // The test is whether an *embedded* wallet exists, not whether any wallet
+    // does. Having MetaMask installed is not the same as having signed in with
+    // it, and treating it as one meant somebody who signed in with X never got
+    // a wallet of their own.
+    if (embedded || attempted.current) return;
 
     attempted.current = true;
     createWallet().catch(() => {
@@ -33,16 +39,28 @@ export function EnsureEmbeddedWallet() {
       // the desired end state anyway. Allow a retry on genuine errors.
       attempted.current = false;
     });
-  }, [ready, authenticated, walletsReady, wallets.length, createWallet]);
+  }, [ready, authenticated, walletsReady, embedded, createWallet]);
 
   // Having a wallet is not the same as wagmi being connected to it. The
-  // waitlist signs through wagmi's useSignMessage, so a freshly minted
-  // embedded wallet has to be promoted to the active account or step 02 stays
-  // dead for exactly the users this component exists to help.
+  // waitlist signs through wagmi's useSignMessage, so a wallet has to be
+  // promoted to the active account or signing stays dead.
+  //
+  // Which wallet matters. Picking the first one activated whichever extension
+  // happened to be installed -- so signing in with X opened a MetaMask connect
+  // prompt and left the account showing a MetaMask address. Privy's own
+  // `user.wallet` is the account's wallet; the embedded one is the fallback,
+  // and an unrelated extension is never promoted on its own.
   useEffect(() => {
     if (!walletsReady || isConnected || wallets.length === 0) return;
-    void setActiveWallet(wallets[0]);
-  }, [walletsReady, isConnected, wallets, setActiveWallet]);
+
+    const primary = user?.wallet?.address?.toLowerCase();
+    const target =
+      (primary && wallets.find((w) => w.address.toLowerCase() === primary)) ||
+      embedded;
+    if (!target) return;
+
+    void setActiveWallet(target);
+  }, [walletsReady, isConnected, wallets, embedded, user, setActiveWallet]);
 
   return null;
 }
