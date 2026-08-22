@@ -13,7 +13,7 @@
 import { createPublicClient, http, parseAbiItem, type Address } from "viem";
 
 import { launchpadAbi } from "./abi";
-import { LAUNCHPAD_ADDRESS, RPC_URL, chain } from "./config";
+import { LAUNCHPAD_ADDRESS, INDEXER_RPC_URL, chain } from "./config";
 import { cmd, pipeline } from "./redis";
 import { EMPTY, applyBuy, applySell, type Position } from "./pnl";
 
@@ -40,7 +40,7 @@ export const K = {
   volume: "lb:volume",
 };
 
-const client = () => createPublicClient({ chain, transport: http(RPC_URL) });
+const client = () => createPublicClient({ chain, transport: http(INDEXER_RPC_URL) });
 
 /// Addresses that trade but are not traders. The launchpad sells collected token
 /// fees for USDC on every collection, which is a real swap with a real profit,

@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, type Address } from "viem";
 
 import { launchpadAbi, uniswapV3PoolAbi } from "@/lib/abi";
-import { LAUNCHPAD_ADDRESS, RPC_URL, chain } from "@/lib/config";
+import { LAUNCHPAD_ADDRESS, INDEXER_RPC_URL, chain } from "@/lib/config";
 import { cmd, pipeline, redisConfigured } from "@/lib/redis";
 import { K, revive } from "@/lib/indexer";
 import { netPnl, unrealized, marketValue, avgEntryX18, type Position } from "@/lib/pnl";
@@ -33,7 +33,7 @@ type Row = {
 
 /// Current price per whole token, scaled 1e18, for every launch.
 async function prices(): Promise<Map<string, bigint>> {
-  const pub = createPublicClient({ chain, transport: http(RPC_URL) });
+  const pub = createPublicClient({ chain, transport: http(INDEXER_RPC_URL) });
   const launches = (await pub.readContract({
     address: LAUNCHPAD_ADDRESS,
     abi: launchpadAbi,

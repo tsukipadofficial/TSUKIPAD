@@ -15,8 +15,25 @@ export const TICK_SPACING = 200;
 
 /// Docs list rpc.testnet.arc.io; viem ships rpc.testnet.arc.network. Both resolve
 /// to the same chain, and this is overridable for local anvil work.
+///
+/// Reads the app makes on a visitor's behalf -- balances, pool state, the board
+/// -- go here. A managed provider is worth it: the public endpoint rate-limits
+/// bursts, and a rate-limited read used to surface as "not a launch from this
+/// pad" on a token that plainly existed.
 export const RPC_URL =
   process.env.NEXT_PUBLIC_RPC_URL ?? "https://rpc.testnet.arc.io";
+
+/// Server-side endpoint for log scanning, which is a different problem.
+///
+/// The indexer walks history in 20,000-block chunks. Alchemy's free tier caps
+/// eth_getLogs at *ten* blocks, which at Arc's ~169,000 blocks a day would need
+/// ~16,900 calls per pool per day; Arc's own endpoint allows 20,000 per call.
+/// So the managed provider serves visitors and the public one serves the
+/// indexer, which is the reverse of what you would guess.
+///
+/// Never NEXT_PUBLIC_: this one has no reason to reach a browser.
+export const INDEXER_RPC_URL =
+  process.env.INDEXER_RPC_URL ?? "https://rpc.testnet.arc.io";
 
 /// The chain, with its RPC pinned to RPC_URL.
 ///
