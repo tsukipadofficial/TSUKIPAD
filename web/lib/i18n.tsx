@@ -544,6 +544,11 @@ const STRINGS = {
   "pf.view": { en: "View", ja: "表示" },
   "pf.cancel": { en: "Cancel", ja: "キャンセル" },
   "pf.signInToClaim": { en: "Sign in to claim a profile and appear by name.", ja: "サインインしてプロフィールを作成すると、名前で表示されます。" },
+  "fees.row.earmarked": { en: "Held for the earmark", ja: "指定先のため保管" },
+  "fees.anyoneEarmarked": {
+    en: "Anyone can collect. The protocol's share is paid out; the earmarked share is held here until the named account proves itself — the creator cannot take it, and neither can we.",
+    ja: "誰でも回収できます。プロトコル分は支払われ、指定先の分は本人確認が済むまでここに保管されます。発行者も当方も引き出せません。",
+  },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;

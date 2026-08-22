@@ -129,14 +129,22 @@ export function FeesPanel({ launch }: { launch: LaunchView }) {
   // Buy-and-burn has its own scoreboard; holder rewards have their own claim.
   if (launch.buybackAndBurn || launch.rewardsEnabled) return null;
 
+  // On an earmarked launch the creator's share is not paid to anyone: it is
+  // held until the named account proves itself. Labelling it "Creator" claimed
+  // the money was going somewhere it is not.
+  const earmarked = launch.feeRecipient === zeroAddress;
   const youAreRecipient =
-    !!address && address.toLowerCase() === launch.feeRecipient.toLowerCase();
+    !earmarked && !!address && address.toLowerCase() === launch.feeRecipient.toLowerCase();
   const youAreReferrer =
     !!address && !!view?.hasReferrer && address.toLowerCase() === view.referrer.toLowerCase();
 
   const rows: { label: string; value: bigint; mine: boolean }[] = view
     ? [
-        { label: t("fees.row.creator"), value: view.split.creator, mine: youAreRecipient },
+        {
+          label: earmarked ? t("fees.row.earmarked") : t("fees.row.creator"),
+          value: view.split.creator,
+          mine: youAreRecipient,
+        },
         ...(view.hasReferrer
           ? [{ label: t("fees.row.referrer"), value: view.split.referrer, mine: youAreReferrer }]
           : []),
@@ -171,7 +179,9 @@ export function FeesPanel({ launch }: { launch: LaunchView }) {
         )}
       </div>
 
-      <p className="mt-3 text-xs leading-relaxed text-faint">{t("fees.anyone")}</p>
+      <p className="mt-3 text-xs leading-relaxed text-faint">
+        {earmarked ? t("fees.anyoneEarmarked") : t("fees.anyone")}
+      </p>
 
       <Button
         className="mt-3 w-full"

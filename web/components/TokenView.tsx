@@ -85,9 +85,15 @@ export function TokenView({ token }: { token: Address }) {
     );
   }
 
-  // A launch is "redirected" when fees go somewhere other than the launcher.
+  // An earmarked launch has no recipient at all until somebody proves the
+  // account is theirs, so its recipient is the zero address by construction.
+  const earmarked = launch.feeRecipient === zeroAddress;
+
+  // A launch is "redirected" when fees go somewhere other than the launcher --
+  // but an earmark is not a destination yet, and printing 0x0000…0000 as the
+  // place fees are "sent to" reads like they are being burned.
   const redirected =
-    launch.feeRecipient.toLowerCase() !== launch.creator.toLowerCase();
+    !earmarked && launch.feeRecipient.toLowerCase() !== launch.creator.toLowerCase();
   const funds = beneficiaryLink(meta.fundsLabel);
 
   const allocationLocked =
@@ -333,7 +339,7 @@ export function TokenView({ token }: { token: Address }) {
 
           {/* A launch whose fees are earmarked has no recipient until somebody
               proves the account is theirs, so a zero recipient is the signal. */}
-          {launch.feeRecipient === zeroAddress ? (
+          {earmarked ? (
             <Card className="border-cyan p-4">
               <p className="eyebrow mb-2 text-cyan">{t("token.earmarked")}</p>
               <p className="text-sm leading-relaxed text-muted">{t("token.earmarkedBody")}</p>
