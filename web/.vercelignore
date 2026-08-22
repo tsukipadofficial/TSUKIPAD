@@ -1,1 +1,8 @@
+# Local-only environment files.
+#
+# Vercel's own project variables are the single source of truth: they are set
+# before the build, and Next only fills variables that are not already defined,
+# so an uploaded .env.production would sit behind them as a stale second copy of
+# the contract addresses -- harmless right up until one of them drifts.
 .env.local
+.env.production
