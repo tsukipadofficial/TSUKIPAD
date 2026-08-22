@@ -19,6 +19,16 @@ import type { LaunchView } from "@/lib/hooks";
 /// on-chain at launch. The caller cannot redirect a penny of it, which is why
 /// the button is shown to everyone rather than gated to the creator -- gating it
 /// would only mean fees sit uncollected whenever the creator is away.
+/// What the panel's headline should add up to: the rows on screen, not the
+/// whole pot. A total that exceeds its own breakdown reads like something is
+/// being withheld.
+function rowsTotal(
+  view: { usdcSide: bigint; split: { creator: bigint; treasury: bigint; referrer: bigint } },
+  includeTreasury: boolean,
+): bigint {
+  return view.split.creator + view.split.referrer + (includeTreasury ? view.split.treasury : 0n);
+}
+
 export function FeesPanel({ launch }: { launch: LaunchView }) {
   const t = useT();
   const { address, isConnected, chainId } = useAccount();
@@ -42,6 +52,7 @@ export function FeesPanel({ launch }: { launch: LaunchView }) {
       { address: pool, abi: uniswapV3PoolAbi, functionName: "slot0" },
       { address: LAUNCHPAD_ADDRESS, abi: launchpadAbi, functionName: "protocolFeeBps" },
       { address: LAUNCHPAD_ADDRESS, abi: launchpadAbi, functionName: "referralOf", args: [launch.token] },
+      { address: LAUNCHPAD_ADDRESS, abi: launchpadAbi, functionName: "treasury" },
     ] as const,
     query: { refetchInterval: 20_000 },
   });
@@ -96,6 +107,7 @@ export function FeesPanel({ launch }: { launch: LaunchView }) {
 
     return {
       usdcSide,
+      treasury: data[8].result as `0x${string}`,
       referrer: referral[0] as `0x${string}`,
       hasReferrer,
       split: splitFees({
@@ -138,6 +150,16 @@ export function FeesPanel({ launch }: { launch: LaunchView }) {
   const youAreReferrer =
     !!address && !!view?.hasReferrer && address.toLowerCase() === view.referrer.toLowerCase();
 
+  // The launch's own share is public: the person it is earmarked for has to be
+  // able to see what is waiting before they know it is worth signing in for.
+  //
+  // The protocol's share is shown only to the treasury. Everything here is
+  // readable on-chain by anyone, so this is tidiness rather than secrecy -- but
+  // a stranger has no use for our cut, and showing it invites the reading that
+  // it is somehow theirs.
+  const youAreTreasury =
+    !!address && !!view && address.toLowerCase() === view.treasury.toLowerCase();
+
   const rows: { label: string; value: bigint; mine: boolean }[] = view
     ? [
         {
@@ -148,7 +170,9 @@ export function FeesPanel({ launch }: { launch: LaunchView }) {
         ...(view.hasReferrer
           ? [{ label: t("fees.row.referrer"), value: view.split.referrer, mine: youAreReferrer }]
           : []),
-        { label: t("fees.row.protocol"), value: view.split.treasury, mine: false },
+        ...(youAreTreasury
+          ? [{ label: t("fees.row.protocol"), value: view.split.treasury, mine: true }]
+          : []),
       ]
     : [];
 
@@ -157,7 +181,11 @@ export function FeesPanel({ launch }: { launch: LaunchView }) {
       <div className="flex items-baseline justify-between">
         <p className="eyebrow">{t("fees.title")}</p>
         <span className="font-mono text-xs text-faint">
-          {view ? formatUsd(Number(view.usdcSide) / 1e6) : "—"}
+          {view
+            ? formatUsd(
+                Number(rowsTotal(view, youAreTreasury)) / 1e6,
+              )
+            : "—"}
         </span>
       </div>
 

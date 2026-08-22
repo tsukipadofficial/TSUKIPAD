@@ -406,15 +406,15 @@ const STRINGS = {
     ja: "@tsukipad_ のウェイトリストで{rank}位です。\n\nArc Network上のUniswap V3 USDCプールへ直接フェアローンチ。時価総額$3,000から、供給量の100%が流動性に、LPはローンチ時にバーン。\n\ntsukipad.com",
   },
   // --- uncollected fees -------------------------------------------------
-  "fees.title": { en: "Uncollected fees", ja: "未回収の手数料" },
+  "fees.title": { en: "Still in the pool", ja: "プール内の未回収分" },
   "fees.loading": { en: "Reading the pool…", ja: "プールを読込中…" },
   "fees.row.creator": { en: "Creator", ja: "発行者" },
   "fees.row.referrer": { en: "Referrer", ja: "紹介者" },
   "fees.row.protocol": { en: "Protocol", ja: "プロトコル" },
   "fees.you": { en: "you", ja: "あなた" },
   "fees.anyone": {
-    en: "Anyone can collect. Whoever presses it pays the gas; the fees always go to the addresses recorded at launch.",
-    ja: "誰でも回収できます。押した人がガス代を払い、手数料は必ずローンチ時に記録されたアドレスへ送られます。",
+    en: "Fees the pool has earned but nobody has swept yet. Anyone can collect; whoever presses it pays the gas, and the fees always go to the addresses recorded at launch.",
+    ja: "プールが獲得済みで、まだ回収されていない手数料です。誰でも回収でき、押した人がガス代を負担します。手数料は必ずローンチ時に記録されたアドレスへ送られます。",
   },
   "fees.collect": { en: "Collect fees", ja: "手数料を回収" },
   "fees.collecting": { en: "Collecting…", ja: "回収中…" },
@@ -546,12 +546,13 @@ const STRINGS = {
   "pf.signInToClaim": { en: "Sign in to claim a profile and appear by name.", ja: "サインインしてプロフィールを作成すると、名前で表示されます。" },
   "fees.row.earmarked": { en: "Held for the earmark", ja: "指定先のため保管" },
   "fees.anyoneEarmarked": {
-    en: "Anyone can collect. The protocol's share is paid out; the earmarked share is held here until the named account proves itself — the creator cannot take it, and neither can we.",
-    ja: "誰でも回収できます。プロトコル分は支払われ、指定先の分は本人確認が済むまでここに保管されます。発行者も当方も引き出せません。",
+    en: "Fees the pool has earned but nobody has swept yet. Anyone can collect; the earmarked share then joins what is already held in escrow below, and only the named account can take it out.",
+    ja: "プールが獲得済みで、まだ回収されていない手数料です。誰でも回収でき、指定先の分は下記のエスクロー残高に加算されます。引き出せるのは指定アカウントのみです。",
   },
   "copy.hint": { en: "click to copy", ja: "クリックでコピー" },
   "copy.done": { en: "Copied", ja: "コピー完了" },
   "token.explorer": { en: "explorer", ja: "エクスプローラ" },
+  "token.earmarkedHeld": { en: "held in escrow", ja: "エスクローに保管中" },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;

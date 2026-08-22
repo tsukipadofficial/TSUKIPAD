@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useReadContract } from "wagmi";
 import Link from "next/link";
 import { zeroAddress } from "viem";
 import type { Address } from "viem";
@@ -16,7 +17,8 @@ import { FeesPanel } from "./FeesPanel";
 import { CopyAddress } from "./CopyAddress";
 import { useLaunch } from "@/lib/hooks";
 import { useTrades } from "@/lib/useTrades";
-import { EXPLORER_URL, isDeployed } from "@/lib/config";
+import { EXPLORER_URL, LAUNCHPAD_ADDRESS, isDeployed } from "@/lib/config";
+import { launchpadAbi } from "@/lib/abi";
 import { formatUsd, formatTokenPrice, shortAddress, timeAgo } from "@/lib/format";
 import { tickToHumanPrice } from "@/lib/launch-math";
 import { decodeMetadata, safeImageUrl, beneficiaryLink, telegramUrl } from "@/lib/metadata";
@@ -25,6 +27,17 @@ import { useI18n } from "@/lib/i18n";
 export function TokenView({ token }: { token: Address }) {
   const { t, lang } = useI18n();
   const { launch, isLoading, notFound, error } = useLaunch(token);
+
+  // What the escrow is holding. Without this the page showed uncollected fees
+  // going to zero after a collection and said nothing about where they went,
+  // which reads exactly like the earmarked money disappearing.
+  const { data: escrowed } = useReadContract({
+    address: LAUNCHPAD_ADDRESS,
+    abi: launchpadAbi,
+    functionName: "escrowUsdc",
+    args: [token],
+    query: { enabled: isDeployed, refetchInterval: 30_000 },
+  });
   const { trades, isLoading: tradesLoading } = useTrades(launch?.pool);
 
   const meta = useMemo(
@@ -344,6 +357,10 @@ export function TokenView({ token }: { token: Address }) {
           {earmarked ? (
             <Card className="border-cyan p-4">
               <p className="eyebrow mb-2 text-cyan">{t("token.earmarked")}</p>
+              <p className="tabular text-3xl font-bold text-cyan">
+                {formatUsd(Number((escrowed as bigint | undefined) ?? 0n) / 1e6)}
+              </p>
+              <p className="eyebrow mb-3 mt-1">{t("token.earmarkedHeld")}</p>
               <p className="text-sm leading-relaxed text-muted">{t("token.earmarkedBody")}</p>
               <Link href="/claim" className="mt-3 inline-block">
                 <Button variant="ghost" size="sm">{t("token.earmarkedCta")}</Button>
