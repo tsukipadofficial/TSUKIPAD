@@ -17,6 +17,7 @@ import { createPublicClient } from "viem";
 import { launchpadAbi } from "@/lib/abi";
 import { LAUNCHPAD_ADDRESS, RPC_URL, chain, PRIVY_APP_ID } from "@/lib/config";
 import { commitmentFor, PROVIDERS, type Provider } from "@/lib/commitment";
+import { privyUserId } from "@/lib/privy-verify";
 
 export const dynamic = "force-dynamic";
 
@@ -26,18 +27,29 @@ function bad(error: string, status = 400) {
   return NextResponse.json({ ok: false, error }, { status });
 }
 
-/// Ask Privy who this user is. The access token proves the session; the user
-/// record carries the linked accounts, which is what we actually need. Reading
-/// it requires the app secret, so it can only happen server-side.
+/// Ask Privy who this user is, in two steps because they answer two different
+/// questions.
+///
+/// The access token proves a session, and it is a JWT this app can verify by
+/// itself against Privy's public keys -- that yields the user's id and nothing
+/// more. The linked accounts live on the user record, which is app-scoped data
+/// and needs the app's own credentials, sent as Basic auth.
+///
+/// Conflating the two -- presenting the user's token where the app's belongs --
+/// simply fails, and the failure looks to the visitor like their session
+/// expired seconds after signing in.
 async function privyUser(accessToken: string): Promise<Record<string, unknown> | null> {
   const secret = process.env.PRIVY_APP_SECRET;
   if (!secret) return null;
+
+  const did = await privyUserId(accessToken);
+  if (!did) return null;
+
   const auth = Buffer.from(`${PRIVY_APP_ID}:${secret}`).toString("base64");
-  const res = await fetch("https://auth.privy.io/api/v1/users/me", {
+  const res = await fetch(`https://auth.privy.io/api/v1/users/${encodeURIComponent(did)}`, {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Basic ${auth}`,
       "privy-app-id": PRIVY_APP_ID,
-      "privy-app-secret-auth": `Basic ${auth}`,
     },
     cache: "no-store",
   });

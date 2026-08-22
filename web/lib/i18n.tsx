@@ -549,6 +549,9 @@ const STRINGS = {
     en: "Anyone can collect. The protocol's share is paid out; the earmarked share is held here until the named account proves itself — the creator cannot take it, and neither can we.",
     ja: "誰でも回収できます。プロトコル分は支払われ、指定先の分は本人確認が済むまでここに保管されます。発行者も当方も引き出せません。",
   },
+  "copy.hint": { en: "click to copy", ja: "クリックでコピー" },
+  "copy.done": { en: "Copied", ja: "コピー完了" },
+  "token.explorer": { en: "explorer", ja: "エクスプローラ" },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;

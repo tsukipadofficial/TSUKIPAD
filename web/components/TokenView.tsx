@@ -13,6 +13,7 @@ import { RewardsPanel } from "./RewardsPanel";
 import { CreatorLockPanel } from "./CreatorLockPanel";
 import { BurnPanel } from "./BurnPanel";
 import { FeesPanel } from "./FeesPanel";
+import { CopyAddress } from "./CopyAddress";
 import { useLaunch } from "@/lib/hooks";
 import { useTrades } from "@/lib/useTrades";
 import { EXPLORER_URL, isDeployed } from "@/lib/config";
@@ -141,13 +142,14 @@ export function TokenView({ token }: { token: Address }) {
           ) : null}
 
           <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+            <CopyAddress address={launch.token} />
             <a
               href={`${EXPLORER_URL}/address/${launch.token}`}
               target="_blank"
               rel="noreferrer"
-              className="tabular text-muted underline-offset-4 hover:text-lime hover:underline"
+              className="text-faint underline-offset-4 hover:text-lime hover:underline"
             >
-              {shortAddress(launch.token)}
+              {t("token.explorer")}
             </a>
             <span className="text-faint">·</span>
             <a
