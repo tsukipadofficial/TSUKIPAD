@@ -1,0 +1,33 @@
+# Keeps the position indexer current.
+#
+# Vercel's Hobby plan allows one cron run per day, which is not an indexer. This
+# runs every five minutes instead, which is the floor GitHub Actions offers.
+# Scheduled runs can be delayed when Actions is busy; that is harmless here,
+# because each run resumes from its own stored cursor rather than a wall clock.
+name: index
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  # Never let a slow run overlap the next tick.
+  group: indexer
+  cancel-in-progress: false
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run one indexing pass
+        run: |
+          code=$(curl -s -o /tmp/out.json -w "%{http_code}" --max-time 120 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://www.tsukipad.com/api/index")
+          echo "HTTP $code"
+          cat /tmp/out.json
+          echo
+          # A rate-limited RPC is expected and not a failure: the cursors did not
+          # move, so the next run covers the same ground.
+          test "$code" = "200"

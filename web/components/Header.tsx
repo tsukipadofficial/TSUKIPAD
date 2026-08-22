@@ -18,6 +18,7 @@ const NAV = [
   { href: "/", key: "nav.board" as const },
   { href: "/create", key: "nav.launch" as const },
   { href: "/waitlist", key: "nav.waitlist" as const },
+  { href: "/leaderboard", key: "nav.leaderboard" as const },
   { href: "/referrals", key: "nav.referrals" as const },
 ];
 

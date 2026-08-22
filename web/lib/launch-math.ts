@@ -54,6 +54,17 @@ export function marketCapFromSqrtPriceX96(sqrtPriceX96: bigint, supply: bigint):
   return humanPrice * Number(supply);
 }
 
+/// Price in USDC per whole token, scaled by 1e18.
+///
+/// Integer throughout, unlike marketCapFromSqrtPriceX96 which works in logs for
+/// display. Profit accounting multiplies this by balances, so a float here would
+/// drift into somebody's reported profit.
+export function priceX18FromSqrt(sqrtPriceX96: bigint): bigint {
+  // (sqrt / 2^96)^2 gives token1 per token0 in base units. USDC is 6dp against
+  // the token's 18, so 1e12 converts to whole-token terms; 1e18 is the scale.
+  return (sqrtPriceX96 * sqrtPriceX96 * 10n ** 30n) >> 192n;
+}
+
 /// sqrt(price) at a tick, in raw base-unit terms.
 function sqrtAt(tick: number): number {
   return Math.exp(0.5 * tick * LOG_TICK_BASE);
