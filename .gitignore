@@ -27,3 +27,8 @@ mobile/ios/
 mobile/android/
 mobile/.expo/
 mobile/.env
+
+# Rendered video intermediates. The scripts in marketing/ regenerate both, and
+# 480 PNGs per piece has no business in git history.
+marketing/frames*/
+marketing/*.wav
