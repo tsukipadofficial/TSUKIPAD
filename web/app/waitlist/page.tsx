@@ -51,8 +51,9 @@ export default function WaitlistPage() {
   ///
   /// `?ref=` is a wallet address, not a handle -- `rememberReferrer` drops
   /// anything that is not one, so a handle here would look like a referral
-  /// link and silently credit nobody. Someone who has not linked a wallet yet
-  /// gets the plain link, which is honest about earning them nothing.
+  /// link and silently credit nobody. Rather than hand out a link that earns
+  /// nothing, the post button itself is gated on a connected wallet, which
+  /// leaves the fallback below unreachable from the share card.
   const refLink = address ? `${SITE_URL}/?ref=${address}` : SITE_URL;
 
   const refresh = useCallback(async () => {
@@ -286,6 +287,9 @@ export default function WaitlistPage() {
             <h2 className="text-xl font-bold">{t("wl.share")}</h2>
           </div>
           <p className="mt-2 max-w-2xl text-sm text-muted">{t("wl.shareBody")}</p>
+          {!address && (
+            <p className="mt-2 max-w-2xl text-sm text-cyan">{t("wl.postLockedWhy")}</p>
+          )}
           <div className="mt-4 flex flex-wrap gap-3">
             <a
               href={`https://x.com/intent/follow?screen_name=${X_HANDLE}`}
@@ -294,18 +298,24 @@ export default function WaitlistPage() {
             >
               <Button variant="ghost">{t("wl.follow")}</Button>
             </a>
-            <a
-              href={`https://x.com/intent/post?text=${encodeURIComponent(
-                t("wl.tweet", {
-                  rank: rank !== null ? String(rank) : "?",
-                  link: refLink,
-                }),
-              )}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button variant="pink">{t("wl.post")}</Button>
-            </a>
+            {address ? (
+              <a
+                href={`https://x.com/intent/post?text=${encodeURIComponent(
+                  t("wl.tweet", {
+                    rank: rank !== null ? String(rank) : "?",
+                    link: refLink,
+                  }),
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button variant="pink">{t("wl.post")}</Button>
+              </a>
+            ) : (
+              <Button variant="pink" disabled={!ready} onClick={() => login()}>
+                {t("wl.postLocked")}
+              </Button>
+            )}
           </div>
         </Card>
       )}

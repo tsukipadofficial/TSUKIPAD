@@ -409,6 +409,11 @@ const STRINGS = {
   },
   "wl.follow": { en: "Follow @tsukipad_", ja: "@tsukipad_ をフォロー" },
   "wl.post": { en: "Post your place", ja: "順位を投稿" },
+  "wl.postLocked": { en: "Connect a wallet to post", ja: "接続して投稿" },
+  "wl.postLockedWhy": {
+    en: "Your post carries your referral link, and that link is your wallet address. Connect one and everyone who joins through your post is credited to you.",
+    ja: "投稿にはあなたの紹介リンクが入り、そのリンクはあなたのウォレットアドレスです。接続すれば、あなたの投稿から参加した人はすべてあなたの紹介になります。",
+  },
   "wl.tweet": {
     en: "I'm #{rank} on the @tsukipad_ waitlist.\n\nFair-launch tokens straight into a Uniswap V3 USDC pool on Arc Network. $3,000 opening market cap, 100% of supply becomes the liquidity, LP burned on launch.\n\nJoin with my link:\n{link}",
     ja: "@tsukipad_ のウェイトリストで{rank}位です。\n\nArc Network上のUniswap V3 USDCプールへ直接フェアローンチ。時価総額$3,000から、供給量の100%が流動性に、LPはローンチ時にバーン。\n\n私の紹介リンクから:\n{link}",
