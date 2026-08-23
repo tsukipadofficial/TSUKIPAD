@@ -89,3 +89,13 @@ export function countdown(toSeconds: number | bigint, lang: "en" | "ja" = "en"):
   if (mins >= 60) return `${Math.floor(mins / 60)}h ${mins % 60}m`;
   return `${mins}m ${String(secs).padStart(2, "0")}s`;
 }
+
+/// Compact market cap. A board is unreadable when every entry reads
+/// "$3,140,000", and this market quotes caps as "3.1M" anyway.
+export function mcap(n: number | null | undefined): string {
+  if (n === null || n === undefined || !isFinite(n) || n <= 0) return "—";
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+  return `$${n.toFixed(0)}`;
+}

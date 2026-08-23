@@ -522,6 +522,31 @@ const STRINGS = {
     ja: "ポジションはオンチェーンのスワップから集計されるため、プロフィールの有無にかかわらず反映されます。取得単価は加重平均です。",
   },
 
+  "pf.errNoName": { en: "Could not assign a name. Try again.", ja: "名前を割り当てられませんでした。再試行してください。" },
+  "pf.renameHint": {
+    en: "You were given a name automatically. Change it to anything not already taken.",
+    ja: "名前は自動で割り当てられています。未使用の名前であれば自由に変更できます。",
+  },
+  "pf.avatar": { en: "Picture URL", ja: "画像URL" },
+  "pf.earned": { en: "Fees earned", ja: "獲得手数料" },
+  "pf.since": { en: "Trading since {d}", ja: "{d} から取引" },
+  "pf.topTrade": { en: "Best trade", ja: "最高の取引" },
+  "pf.positions": { en: "Positions", ja: "ポジション" },
+  // --- boards ------------------------------------------------------------
+  "lb.tabPnl": { en: "Top PNL", ja: "損益ランキング" },
+  "lb.tabEarners": { en: "Top earners", ja: "獲得額ランキング" },
+  "lb.topTrades": { en: "Top trades", ja: "ベストトレード" },
+  "lb.earned": { en: "earned", ja: "獲得" },
+  "lb.emptyEarners": {
+    en: "Nobody has been paid launch fees yet. Launch a token and the board fills itself.",
+    ja: "まだ手数料を受け取った人はいません。トークンを発行すれば自動で反映されます。",
+  },
+  "lb.earnersNote": {
+    en: "Fees the launchpad has paid out: creator shares, referral shares and claimed earmarks. The protocol treasury is excluded from its own board.",
+    ja: "ローンチパッドが支払った手数料（発行者・紹介者・指定先の受取分）。運営トレジャリーは対象外です。",
+  },
+  "lb.mcap": { en: "MC", ja: "時価総額" },
+  "lb.entry": { en: "entry", ja: "取得" },
   "pf.notFound": { en: "No such profile.", ja: "プロフィールが見つかりません。" },
   "pf.notFoundBody": { en: "Nobody has claimed this name.", ja: "この名前はまだ登録されていません。" },
   "pf.netPnl": { en: "Net PNL", ja: "純損益" },

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redisConfigured } from "@/lib/redis";
 import { runIndexer, syncPools } from "@/lib/indexer";
+import { runEarnings } from "@/lib/earnings";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -26,7 +27,18 @@ export async function GET(req: NextRequest) {
   try {
     if (req.nextUrl.searchParams.get("pools") === "sync") await syncPools();
     const result = await runIndexer();
-    return NextResponse.json({ ok: true, ms: Date.now() - started, ...result });
+
+    // Earnings run after positions and cannot fail the request. Trading data is
+    // the load-bearing half; a rate-limited earnings pass should leave the board
+    // one tick stale, not return a 500 that makes the cron look broken.
+    let earnings: Awaited<ReturnType<typeof runEarnings>> | { error: string };
+    try {
+      earnings = await runEarnings();
+    } catch (e) {
+      earnings = { error: e instanceof Error ? e.message.split("\n")[0] : "failed" };
+    }
+
+    return NextResponse.json({ ok: true, ms: Date.now() - started, ...result, earnings });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message.split("\n")[0] : "failed" },

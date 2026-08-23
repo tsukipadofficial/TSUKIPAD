@@ -6,14 +6,12 @@
 /// and means the number on screen is the number right now.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createPublicClient, http, type Address } from "viem";
 
-import { launchpadAbi, uniswapV3PoolAbi } from "@/lib/abi";
-import { LAUNCHPAD_ADDRESS, INDEXER_RPC_URL, chain } from "@/lib/config";
 import { cmd, pipeline, redisConfigured } from "@/lib/redis";
 import { K, revive } from "@/lib/indexer";
+import { topEarners } from "@/lib/earnings";
+import { launchMeta, mcapFromPriceX18, type LaunchMeta } from "@/lib/launchmeta";
 import { netPnl, unrealized, marketValue, avgEntryX18, type Position } from "@/lib/pnl";
-import { priceX18FromSqrt } from "@/lib/launch-math";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +22,7 @@ type Row = {
   wallet: string;
   handle: string | null;
   display: string | null;
+  avatar: string | null;
   netPnl: number;
   realized: number;
   unrealized: number;
@@ -31,71 +30,83 @@ type Row = {
   positions: number;
 };
 
-/// Current price per whole token, scaled 1e18, for every launch.
-async function prices(): Promise<Map<string, bigint>> {
-  const pub = createPublicClient({ chain, transport: http(INDEXER_RPC_URL) });
-  const launches = (await pub.readContract({
-    address: LAUNCHPAD_ADDRESS,
-    abi: launchpadAbi,
-    functionName: "recentLaunches",
-    args: [0n, 200n],
-  })) as readonly { token: Address; pool: Address }[];
+/// A single position, enriched enough to render without a second lookup.
+function positionRow(token: string, p: Position, m: LaunchMeta | undefined) {
+  const price = m?.priceX18 ?? 0n;
+  const entryX18 = avgEntryX18(p);
+  return {
+    token,
+    name: m?.name ?? null,
+    symbol: m?.symbol ?? null,
+    image: m?.image ?? null,
+    tokens: p.tokens.toString(),
+    value: Number(marketValue(p, price)) / 1e6,
+    cost: Number(p.costUsdc) / 1e6,
+    spent: Number(p.boughtUsdc) / 1e6,
+    realized: Number(p.realizedUsdc) / 1e6,
+    unrealized: Number(unrealized(p, price)) / 1e6,
+    netPnl: Number(netPnl(p, price)) / 1e6,
+    avgEntry: Number(entryX18) / 1e18,
+    // Memecoin entries are quoted as market cap, not as a price with five
+    // leading zeros. Needs the supply, so it is null for an unknown token.
+    entryMcap: m ? mcapFromPriceX18(entryX18, m.supply) : null,
+    marketCap: m?.marketCapUsd ?? null,
+    trades: p.trades,
+    open: p.tokens > 0n,
+  };
+}
 
-  if (launches.length === 0) return new Map();
-
-  const slots = (await pub.multicall({
-    contracts: launches.map((l) => ({
-      address: l.pool, abi: uniswapV3PoolAbi, functionName: "slot0",
-    })) as never,
-    allowFailure: true,
-  })) as { status: string; result?: unknown }[];
-
-  const out = new Map<string, bigint>();
-  launches.forEach((l, i) => {
-    const r = slots[i];
-    if (r.status !== "success") return;
-    const sqrt = (r.result as readonly [bigint, ...unknown[]])[0];
-    out.set(l.token.toLowerCase(), priceX18FromSqrt(sqrt));
+/// Attach profiles so boards show names and faces rather than hex.
+async function decorate(rows: { wallet: string; handle: string | null; display: string | null; avatar: string | null }[]) {
+  if (rows.length === 0) return;
+  const dids = await pipeline<string | null>(
+    rows.map((r) => ["GET", `profile:wallet:${r.wallet.toLowerCase()}`]),
+  );
+  const found = dids.map((d, i) => ({ i, did: d })).filter((x) => x.did);
+  if (found.length === 0) return;
+  const profiles = await pipeline<string | null>(
+    found.map((f) => ["GET", `profile:did:${f.did}`]),
+  );
+  found.forEach((f, k) => {
+    if (!profiles[k]) return;
+    const pr = JSON.parse(profiles[k] as string);
+    rows[f.i].handle = pr.handle ?? null;
+    rows[f.i].display = pr.display ?? null;
+    rows[f.i].avatar = pr.avatar ?? null;
   });
-  return out;
 }
 
 export async function GET(req: NextRequest) {
   if (!redisConfigured) return NextResponse.json({ ok: true, rows: [], configured: false });
 
   const wallet = req.nextUrl.searchParams.get("wallet");
-  const px = await prices();
+  const mode = req.nextUrl.searchParams.get("mode");
+  const meta = await launchMeta();
 
-  // One trader's book, with a row per token.
+  // ---- one trader's book -------------------------------------------------
   if (wallet) {
     const tokens = (await cmd<string[]>("SMEMBERS", K.traderTokens(wallet))) ?? [];
     if (tokens.length === 0) {
       return NextResponse.json({ ok: true, wallet, totals: null, positions: [] });
     }
     const raw = await pipeline<string | null>(tokens.map((t) => ["GET", K.position(wallet, t)]));
-    let realized = 0n, unreal = 0n, volume = 0n, value = 0n;
+    let realized = 0n, unreal = 0n, volume = 0n, value = 0n, spent = 0n;
     const positions = tokens.flatMap((t, i) => {
       if (!raw[i]) return [];
       const p: Position = revive(raw[i] as string);
-      const price = px.get(t.toLowerCase()) ?? 0n;
+      const m = meta.get(t.toLowerCase());
+      const price = m?.priceX18 ?? 0n;
       realized += p.realizedUsdc;
       unreal += unrealized(p, price);
       volume += p.boughtUsdc + p.soldUsdc;
       value += marketValue(p, price);
-      return [{
-        token: t,
-        tokens: p.tokens.toString(),
-        value: Number(marketValue(p, price)) / 1e6,
-        cost: Number(p.costUsdc) / 1e6,
-        realized: Number(p.realizedUsdc) / 1e6,
-        unrealized: Number(unrealized(p, price)) / 1e6,
-        netPnl: Number(netPnl(p, price)) / 1e6,
-        avgEntry: Number(avgEntryX18(p)) / 1e18,
-        trades: p.trades,
-        open: p.tokens > 0n,
-      }];
+      spent += p.boughtUsdc;
+      return [positionRow(t, p, m)];
     });
     positions.sort((a, b) => b.netPnl - a.netPnl);
+
+    const earnedRaw = await cmd<string | null>("GET", `earn:total:${wallet.toLowerCase()}`);
+
     return NextResponse.json({
       ok: true, wallet,
       totals: {
@@ -104,15 +115,34 @@ export async function GET(req: NextRequest) {
         unrealized: Number(unreal) / 1e6,
         volume: Number(volume) / 1e6,
         value: Number(value) / 1e6,
+        spent: Number(spent) / 1e6,
+        // Fees this wallet has been paid by the launchpad, which is income, not
+        // a trading result -- kept out of netPnl so the two never blur.
+        earned: earnedRaw ? Number(BigInt(earnedRaw)) / 1e6 : 0,
       },
       positions,
     });
   }
 
-  // The board. Traders are capped: ranking every wallet on every request would
-  // grow into the request that times out on the busiest day of the year.
+  // ---- top earners -------------------------------------------------------
+  if (mode === "earners") {
+    const raw = await topEarners(TOP);
+    const rows = raw.map((e) => ({
+      wallet: e.wallet, handle: null as string | null, display: null as string | null,
+      avatar: null as string | null, earned: e.earned,
+    }));
+    await decorate(rows);
+    return NextResponse.json({ ok: true, rows, configured: true });
+  }
+
+  // ---- the PNL board -----------------------------------------------------
+  // Traders are capped: ranking every wallet on every request would grow into
+  // the request that times out on the busiest day of the year.
   const traders = ((await cmd<string[]>("SMEMBERS", K.traders)) ?? []).slice(0, MAX_TRADERS);
   const rows: Row[] = [];
+  // Every position anyone holds, so the best individual trades can be surfaced
+  // without a second pass over the same data.
+  const allTrades: { wallet: string; row: ReturnType<typeof positionRow> }[] = [];
 
   for (const w of traders) {
     const tokens = (await cmd<string[]>("SMEMBERS", K.traderTokens(w))) ?? [];
@@ -122,14 +152,16 @@ export async function GET(req: NextRequest) {
     raw.forEach((r, i) => {
       if (!r) return;
       const p = revive(r as string);
-      const price = px.get(tokens[i].toLowerCase()) ?? 0n;
+      const m = meta.get(tokens[i].toLowerCase());
+      const price = m?.priceX18 ?? 0n;
       realized += p.realizedUsdc;
       unreal += unrealized(p, price);
       volume += p.boughtUsdc + p.soldUsdc;
       if (p.tokens > 0n) open++;
+      allTrades.push({ wallet: w, row: positionRow(tokens[i], p, m) });
     });
     rows.push({
-      wallet: w, handle: null, display: null,
+      wallet: w, handle: null, display: null, avatar: null,
       netPnl: Number(realized + unreal) / 1e6,
       realized: Number(realized) / 1e6,
       unrealized: Number(unreal) / 1e6,
@@ -141,24 +173,15 @@ export async function GET(req: NextRequest) {
   rows.sort((a, b) => b.netPnl - a.netPnl);
   const top = rows.slice(0, TOP);
 
-  // Attach profiles so the board shows names rather than hex.
-  if (top.length > 0) {
-    const dids = await pipeline<string | null>(
-      top.map((r) => ["GET", `profile:wallet:${r.wallet.toLowerCase()}`]),
-    );
-    const found = dids.map((d, i) => ({ i, did: d })).filter((x) => x.did);
-    if (found.length > 0) {
-      const profiles = await pipeline<string | null>(
-        found.map((f) => ["GET", `profile:did:${f.did}`]),
-      );
-      found.forEach((f, k) => {
-        if (!profiles[k]) return;
-        const p = JSON.parse(profiles[k] as string);
-        top[f.i].handle = p.handle;
-        top[f.i].display = p.display;
-      });
-    }
-  }
+  const topTrades = allTrades
+    .sort((a, b) => b.row.netPnl - a.row.netPnl)
+    .slice(0, 12)
+    .map((x) => ({ wallet: x.wallet, handle: null as string | null, display: null as string | null, avatar: null as string | null, ...x.row }));
 
-  return NextResponse.json({ ok: true, rows: top, traders: traders.length, configured: true });
+  await decorate(top);
+  await decorate(topTrades);
+
+  return NextResponse.json({
+    ok: true, rows: top, topTrades, traders: traders.length, configured: true,
+  });
 }

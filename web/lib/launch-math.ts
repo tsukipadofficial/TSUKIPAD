@@ -40,11 +40,15 @@ export function ceilingTick(startTick: number, multiple: number): number {
   return alignTick(startTick + span);
 }
 
+/// `supply` is in WHOLE tokens, not base units.
 export function marketCapAtTick(tick: number, supply: bigint): number {
   return tickToHumanPrice(tick) * Number(supply);
 }
 
 /// Market cap implied by a live pool price.
+///
+/// `supply` is in WHOLE tokens, not base units -- pass `totalSupply / 1e18`.
+/// Handing it raw base units overstates the answer by a factor of 1e18.
 export function marketCapFromSqrtPriceX96(sqrtPriceX96: bigint, supply: bigint): number {
   // Work in logs: sqrtPriceX96 routinely exceeds Number.MAX_SAFE_INTEGER, and
   // squaring it directly overflows even in float space for extreme ranges.
