@@ -7,7 +7,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { Button, Card, cx } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import { signMessage, normaliseHandle } from "@/lib/waitlist";
-import { STORAGE_PREFIX, X_HANDLE } from "@/lib/brand";
+import { SITE_URL, STORAGE_PREFIX, X_HANDLE } from "@/lib/brand";
 
 type BoardRow = { rank: number; display: string; clearance: 50 | 100; posted?: boolean };
 type Board = { total: number; board: BoardRow[]; configured: boolean };
@@ -44,6 +44,16 @@ export default function WaitlistPage() {
   const [data, setData] = useState<Board>({ total: 0, board: [], configured: true });
 
   const pct = claimed ? (verified ? 100 : 50) : 0;
+
+  /// The share post carries the poster's own referral link rather than the bare
+  /// domain: the whole point of asking people to post is that whoever they
+  /// bring in is credited to them, and a plain link credits nobody.
+  ///
+  /// `?ref=` is a wallet address, not a handle -- `rememberReferrer` drops
+  /// anything that is not one, so a handle here would look like a referral
+  /// link and silently credit nobody. Someone who has not linked a wallet yet
+  /// gets the plain link, which is honest about earning them nothing.
+  const refLink = address ? `${SITE_URL}/?ref=${address}` : SITE_URL;
 
   const refresh = useCallback(async () => {
     try {
@@ -286,7 +296,10 @@ export default function WaitlistPage() {
             </a>
             <a
               href={`https://x.com/intent/post?text=${encodeURIComponent(
-                t("wl.tweet", { rank: rank !== null ? String(rank) : "?" }),
+                t("wl.tweet", {
+                  rank: rank !== null ? String(rank) : "?",
+                  link: refLink,
+                }),
               )}`}
               target="_blank"
               rel="noopener noreferrer"

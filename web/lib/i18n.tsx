@@ -410,8 +410,8 @@ const STRINGS = {
   "wl.follow": { en: "Follow @tsukipad_", ja: "@tsukipad_ をフォロー" },
   "wl.post": { en: "Post your place", ja: "順位を投稿" },
   "wl.tweet": {
-    en: "I'm #{rank} on the @tsukipad_ waitlist.\n\nFair-launch tokens straight into a Uniswap V3 USDC pool on Arc Network. $3,000 opening market cap, 100% of supply becomes the liquidity, LP burned on launch.\n\ntsukipad.com",
-    ja: "@tsukipad_ のウェイトリストで{rank}位です。\n\nArc Network上のUniswap V3 USDCプールへ直接フェアローンチ。時価総額$3,000から、供給量の100%が流動性に、LPはローンチ時にバーン。\n\ntsukipad.com",
+    en: "I'm #{rank} on the @tsukipad_ waitlist.\n\nFair-launch tokens straight into a Uniswap V3 USDC pool on Arc Network. $3,000 opening market cap, 100% of supply becomes the liquidity, LP burned on launch.\n\nJoin with my link:\n{link}",
+    ja: "@tsukipad_ のウェイトリストで{rank}位です。\n\nArc Network上のUniswap V3 USDCプールへ直接フェアローンチ。時価総額$3,000から、供給量の100%が流動性に、LPはローンチ時にバーン。\n\n私の紹介リンクから:\n{link}",
   },
   // --- uncollected fees -------------------------------------------------
   "fees.title": { en: "Still in the pool", ja: "プール内の未回収分" },
