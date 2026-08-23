@@ -13,6 +13,7 @@ import { erc20Abi } from "@/lib/abi";
 import { USDC_ADDRESS, USDC_DECIMALS, chain, FAUCET_URL } from "@/lib/config";
 import { formatUnitsFloat, shortAddress } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { SITE_OPEN } from "@/lib/gate";
 
 const NAV = [
   { href: "/", key: "nav.board" as const },
@@ -21,6 +22,14 @@ const NAV = [
   { href: "/leaderboard", key: "nav.leaderboard" as const },
   { href: "/referrals", key: "nav.referrals" as const },
 ];
+
+/// While the site is closed, every destination but the waitlist is behind the
+/// gate. Linking to them anyway would just bounce people back here, so the nav
+/// shows what is actually reachable.
+const VISIBLE_NAV = SITE_OPEN ? NAV : NAV.filter((n) => n.href === "/waitlist");
+
+/// The wordmark goes somewhere that exists in both states.
+const HOME = SITE_OPEN ? "/" : "/waitlist";
 
 export function Header() {
   const pathname = usePathname();
@@ -63,12 +72,12 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b-2 border-line bg-void/85 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-5 py-3">
-        <Link href="/" className="group shrink-0">
+        <Link href={HOME} className="group shrink-0">
           <Logo name={NAME_HEAD} accent={NAME_TAIL} size={34} />
         </Link>
 
         <nav className="ml-4 hidden items-center gap-1 sm:flex">
-          {NAV.map((item) => {
+          {VISIBLE_NAV.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
