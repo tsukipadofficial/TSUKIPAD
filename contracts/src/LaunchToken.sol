@@ -28,6 +28,12 @@ contract LaunchToken is ERC20, ERC20Permit {
     /// @notice The account that launched this token.
     address public immutable creator;
 
+    /// @notice The launchpad this token was launched on, by name.
+    /// @dev `launchpad` above is the authoritative answer -- an address cannot
+    ///      be faked. This is the human-readable half, so an explorer or a
+    ///      scanner can label the token without resolving the address first.
+    string public constant PAD = "TSUKIPAD";
+
     /// @notice The launchpad that deployed this token.
     address public immutable launchpad;
 

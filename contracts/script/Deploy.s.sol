@@ -31,11 +31,16 @@ contract Deploy is Script {
 
     uint24 constant POOL_FEE = 10_000; // 1%
     uint16 constant PROTOCOL_FEE_BPS = 5_000; // half of swap fees to treasury
+    uint16 constant REFERRAL_FEE_BPS = 1_000; // 10%, carved out of the protocol half
+    uint256 constant LAUNCH_FEE = 0;          // launching is free
 
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(pk);
         address treasury = vm.envOr("TREASURY", deployer);
+        // The launchpad has no owner, so these are fixed at deployment and can
+        // never be changed afterwards. Getting them wrong means redeploying.
+        address attestor = vm.envOr("ATTESTOR", deployer);
 
         console2.log("chainId :", block.chainid);
         console2.log("deployer:", deployer);
@@ -76,12 +81,16 @@ contract Deploy is Script {
         require(IUniswapV3Factory(factory).feeAmountTickSpacing(POOL_FEE) != 0, "fee tier unavailable");
 
         // --- launchpad stack ---------------------------------------------
-        ArcLaunchpad launchpad = new ArcLaunchpad(USDC, factory, POOL_FEE, treasury, PROTOCOL_FEE_BPS);
+        ArcLaunchpad launchpad = new ArcLaunchpad(
+            USDC, factory, POOL_FEE, treasury, PROTOCOL_FEE_BPS, attestor, LAUNCH_FEE, REFERRAL_FEE_BPS
+        );
         ArcSwapRouter router = new ArcSwapRouter(factory);
 
         vm.stopBroadcast();
 
         console2.log("ArcLaunchpad:", address(launchpad));
+        console2.log("  treasury (permanent):", treasury);
+        console2.log("  attestor (permanent):", attestor);
         console2.log("ArcSwapRouter:", address(router));
 
         _writeDeployment(factory, address(launchpad), address(router), treasury);

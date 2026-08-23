@@ -36,18 +36,25 @@ contract FeeAccountingTest is Test {
     address beneficiary = makeAddr("CHARITY");
     address trader = makeAddr("TRADER");
 
+    /// @dev Kept on the contract so a test can stand up a second launchpad on
+    ///      the same factory -- needed now that the fee split is immutable and
+    ///      a different split means a different deployment.
+    address factoryAddr;
+
     function setUp() public {
         deployCodeTo("MockUSDC.sol:MockUSDC", USDC_ADDR);
         usdc = MockUSDC(USDC_ADDR);
 
         bytes memory code = vm.getCode(FACTORY_ARTIFACT);
-        address factoryAddr;
+        // `create` must write to a local; assembly cannot assign to storage.
+        address f;
         assembly {
-            factoryAddr := create(0, add(code, 0x20), mload(code))
+            f := create(0, add(code, 0x20), mload(code))
         }
+        factoryAddr = f;
         // 50/50 split between creator and platform.
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000);
-        router = new ArcSwapRouter(factoryAddr);
+        launchpad = new ArcLaunchpad(USDC_ADDR, f, FEE, treasury, 5_000, address(this), 0, 0);
+        router = new ArcSwapRouter(f);
         usdc.mint(trader, 1_000_000e6);
     }
 
@@ -133,9 +140,13 @@ contract FeeAccountingTest is Test {
         assertEq(usdc.balanceOf(address(launchpad)), 0, "launchpad kept nothing");
     }
 
+    /// @dev The split follows protocolFeeBps, checked on a launchpad deployed
+    ///      at a different rate. It has to be a second deployment now: the value
+    ///      is immutable, which is the point -- a creator's terms cannot be
+    ///      edited after they launch, only offered differently by a new pad.
     function test_protocolFeeBpsActuallyChangesTheSplit() public {
         // 20% to platform, 80% to creator.
-        launchpad.setProtocolFeeBps(2_000);
+        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 2_000, address(this), 0, 0);
         LaunchToken token = _launch(false, address(0), false);
 
         _buy(address(token), 40_000e6);
@@ -232,20 +243,20 @@ contract FeeAccountingTest is Test {
     // Conservation
     // ------------------------------------------------------------------
 
-    /// @dev A compromised or malicious owner must not be able to seize the
-    ///      creators' half. The cap is immutable, so this is verifiable by
-    ///      anyone before they launch.
-    function test_ownerCannotTakeMoreThanHalfOfFees() public {
+    /// @dev Nobody can seize the creators' half -- there is no owner, and the
+    ///      cap is enforced at deployment. A launchpad that would take more than
+    ///      half cannot be deployed at all, so this is verifiable by anyone
+    ///      before they launch, from the constructor arguments alone.
+    function test_nobodyCanTakeMoreThanHalfOfFees() public {
         assertEq(launchpad.MAX_PROTOCOL_FEE_BPS(), 5_000, "capped at 50%");
 
         vm.expectRevert(ArcLaunchpad.FeeTooHigh.selector);
-        launchpad.setProtocolFeeBps(5_001);
+        new ArcLaunchpad(USDC_ADDR, address(1), FEE, treasury, 5_001, address(this), 0, 0);
 
         vm.expectRevert(ArcLaunchpad.FeeTooHigh.selector);
-        launchpad.setProtocolFeeBps(10_000);
+        new ArcLaunchpad(USDC_ADDR, address(1), FEE, treasury, 10_000, address(this), 0, 0);
 
         // The maximum is allowed, and still leaves creators half.
-        launchpad.setProtocolFeeBps(5_000);
         LaunchToken token = _launch(false, address(0), false);
         _buy(address(token), 40_000e6);
         launchpad.collectFees(address(token));

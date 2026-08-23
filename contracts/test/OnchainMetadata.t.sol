@@ -37,7 +37,7 @@ contract OnchainMetadataTest is Test {
         assembly {
             factoryAddr := create(0, add(code, 0x20), mload(code))
         }
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, makeAddr("treasury"), 5_000);
+        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, makeAddr("treasury"), 5_000, address(this), 0, 0);
     }
 
     function _launchWith(string memory uri) internal returns (address token, uint256 gasUsed) {
@@ -110,7 +110,7 @@ contract OnchainMetadataTest is Test {
         assembly {
             factoryAddr := create(0, add(code, 0x20), mload(code))
         }
-        return new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, makeAddr("treasury"), 5_000);
+        return new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, makeAddr("treasury"), 5_000, address(this), 0, 0);
     }
 
     function _measureOn(ArcLaunchpad lp, string memory uri) internal returns (uint256 gasUsed) {

@@ -36,8 +36,9 @@ const client = () => createPublicClient({ chain, transport: http(INDEXER_RPC_URL
 /// at rank one on a board meant to celebrate creators. It is still readable on
 /// chain; it is just not a competitor in its own contest.
 ///
-/// Read from the contract rather than an env var: `setTreasury` can move it, and
-/// a stale constant here would silently start ranking the protocol again.
+/// Read from the contract rather than an env var. The address is immutable on
+/// chain now, but a launchpad redeploy changes it, and a stale constant here
+/// would silently start ranking the protocol on its own board again.
 let treasuryCache: string | null = null;
 async function notAnEarner(): Promise<Set<string>> {
   if (!treasuryCache) {

@@ -39,9 +39,9 @@ contract ReferralTest is Test {
         assembly {
             factoryAddr := create(0, add(code, 0x20), mload(code))
         }
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000);
+        // 10% of swap fees, fixed at deployment -- there is no setter any more.
+        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000, address(this), 0, 1_000);
         router = new ArcSwapRouter(factoryAddr);
-        launchpad.setReferralFeeBps(1_000); // 10% of swap fees
 
         usdc.mint(alice, 2_000_000e6);
     }
@@ -179,34 +179,36 @@ contract ReferralTest is Test {
         launchpad.launch(params);
     }
 
-    function test_referrerIsFixedAtLaunchAndSurvivesARateChange() public {
+    /// @dev The rate is snapshotted per launch even though the global is now
+    ///      immutable. A later launchpad may deploy at a different rate, and a
+    ///      referrer's share must come from the terms of the launch they
+    ///      actually introduced.
+    function test_referrerAndRateAreSnapshottedAtLaunch() public {
         LaunchToken token = _launch("Fixed", "FIX", referrer);
         (address who, uint16 bps) = launchpad.referralOf(address(token));
         assertEq(who, referrer, "referrer recorded");
         assertEq(bps, 1_000, "rate snapshotted");
 
-        // Cutting the rate must not retroactively cut an existing promise.
-        launchpad.setReferralFeeBps(0);
-        (, uint16 stillBps) = launchpad.referralOf(address(token));
-        assertEq(stillBps, 1_000, "the launch keeps the rate it was created with");
-
         _churn(address(token), 40_000e6);
         launchpad.collectFees(address(token));
-        assertGt(usdc.balanceOf(referrer), 0, "still paid at the original rate");
+        assertGt(usdc.balanceOf(referrer), 0, "paid at the recorded rate");
     }
 
-    function test_rateCannotExceedTheProtocolShare() public {
+    /// @dev The bound moved from a setter to the constructor when the contract
+    ///      lost its owner. A launchpad that would over-promise referrers must
+    ///      fail to deploy at all rather than fail later at collection time.
+    function test_deployRevertsWhenTheRateExceedsTheProtocolShare() public {
         vm.expectRevert(ArcLaunchpad.ReferralFeeTooHigh.selector);
-        launchpad.setReferralFeeBps(6_000); // above protocolFeeBps of 5,000
+        new ArcLaunchpad(USDC_ADDR, address(1), FEE, treasury, 5_000, address(this), 0, 6_000);
 
         vm.expectRevert(ArcLaunchpad.ReferralFeeTooHigh.selector);
-        launchpad.setReferralFeeBps(2_001); // above MAX_REFERRAL_FEE_BPS
+        new ArcLaunchpad(USDC_ADDR, address(1), FEE, treasury, 5_000, address(this), 0, 2_001);
     }
 
-    function test_nonOwnerCannotSetTheRate() public {
-        vm.prank(alice);
-        vm.expectRevert();
-        launchpad.setReferralFeeBps(500);
+    /// @dev There is no setter to guard: the value is `immutable`, so no caller
+    ///      -- privileged or otherwise -- can move it after deployment.
+    function test_theRateIsImmutable() public view {
+        assertEq(launchpad.referralFeeBps(), 1_000, "fixed at the deployed value");
     }
 
     /// @dev Real USDC can blacklist an address, and then every transfer to it

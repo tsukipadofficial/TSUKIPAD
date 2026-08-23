@@ -51,9 +51,9 @@ contract CustodyTest is Test {
         assembly {
             factoryAddr := create(0, add(code, 0x20), mload(code))
         }
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000);
+        launchpad =
+            new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000, vm.addr(attestorKey), 0, 0);
         router = new ArcSwapRouter(factoryAddr);
-        launchpad.setAttestor(vm.addr(attestorKey));
 
         usdc.mint(alice, 2_000_000e6);
     }

@@ -50,9 +50,8 @@ contract FeeRecipientClaimTest is Test {
         assembly {
             factoryAddr := create(0, add(code, 0x20), mload(code))
         }
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000);
+        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000, attestor, 0, 0);
         router = new ArcSwapRouter(factoryAddr);
-        launchpad.setAttestor(attestor);
 
         usdc.mint(alice, 500_000e6);
     }
@@ -260,11 +259,37 @@ contract FeeRecipientClaimTest is Test {
         assertEq(launchpad.launchOf(address(token)).feeRecipient, maintainer, "still claimable after a sweep");
     }
 
-    function test_nonOwnerCannotSweep() public {
+    /// @dev The sweep is permissionless now that the contract has no owner, so
+    ///      the guarantee moved from "only the owner may call it" to "it does
+    ///      not matter who calls it". The destination is hard-coded to the
+    ///      treasury, so an attacker calling it can only pay the gas to send
+    ///      the protocol its own money.
+    function test_anyoneMaySweepButOnlyTheTreasuryIsPaid() public {
         LaunchToken token = _launch(COMMITMENT);
+        _buy(alice, address(token), 40_000e6);
+        launchpad.collectFees(address(token));
+
+        uint256 escrowed = launchpad.escrowUsdc(address(token));
+        assertGt(escrowed, 0, "fees are sitting in escrow");
+        uint256 treasuryBefore = usdc.balanceOf(treasury);
+        uint256 attackerBefore = usdc.balanceOf(attacker);
+
         vm.warp(block.timestamp + 366 days);
         vm.prank(attacker);
-        vm.expectRevert();
+        launchpad.sweepUnclaimedFees(address(token));
+
+        assertEq(usdc.balanceOf(attacker), attackerBefore, "the caller gains nothing");
+        assertEq(usdc.balanceOf(treasury), treasuryBefore + escrowed, "the treasury is paid");
+        assertEq(launchpad.escrowUsdc(address(token)), 0, "escrow drained");
+    }
+
+    /// @dev Permissionless does not mean unguarded: the age gate still holds
+    ///      for every caller, so a live earmark cannot be swept out from under
+    ///      the account it belongs to.
+    function test_sweepStillRevertsBeforeTheDeadline() public {
+        LaunchToken token = _launch(COMMITMENT);
+        vm.prank(attacker);
+        vm.expectRevert(ArcLaunchpad.StillClaimable.selector);
         launchpad.sweepUnclaimedFees(address(token));
     }
 

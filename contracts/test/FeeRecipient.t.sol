@@ -40,7 +40,7 @@ contract FeeRecipientTest is Test {
         assembly {
             factoryAddr := create(0, add(code, 0x20), mload(code))
         }
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000);
+        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000, address(this), 0, 0);
         router = new ArcSwapRouter(factoryAddr);
 
         usdc.mint(alice, 500_000e6);

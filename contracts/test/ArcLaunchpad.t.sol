@@ -55,7 +55,7 @@ contract ArcLaunchpadTest is Test {
         require(factoryAddr != address(0), "factory deploy failed");
         v3Factory = IUniswapV3Factory(factoryAddr);
 
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000); // 50% of fees to protocol
+        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000, address(this), 0, 0); // 50% of fees to protocol
         router = new ArcSwapRouter(factoryAddr);
 
         usdc.mint(alice, 1_000_000e6);
@@ -504,6 +504,33 @@ contract ArcLaunchpadTest is Test {
         vm.warp(block.timestamp + launchpad.CREATOR_LOCK_DURATION());
         launchpad.claimCreatorAllocation(token);
         assertApproxEqRel(IERC20(token).balanceOf(creator), SUPPLY / 10, 0.001e18, "creator got ~10% after the lock");
+    }
+
+    // ---------------- attribution ----------------
+
+    /// @dev A scanner must be able to attribute a launch without a hard-coded
+    ///      address list. `launchpad` is the authoritative answer because an
+    ///      address cannot be faked; `PAD` is the human-readable half so an
+    ///      explorer can label the token without resolving the address first.
+    function test_tokenNamesTheLaunchpadThatDeployedIt() public {
+        (address token,) = _launch();
+        assertEq(LaunchToken(token).launchpad(), address(launchpad), "points at this pad");
+        assertEq(LaunchToken(token).PAD(), "TSUKIPAD", "carries the pad's name");
+        assertEq(launchpad.PAD(), "TSUKIPAD", "pad names itself the same way");
+    }
+
+    /// @dev The contract was deployed without an owner rather than renounced
+    ///      afterwards, so every configurable value is fixed at construction.
+    ///      Absence of a setter cannot be asserted from Solidity; what can be
+    ///      asserted is that a launch cannot change the terms it was made under.
+    function test_configurationIsFixedAtDeployment() public {
+        (address token,) = _launch();
+        assertEq(launchpad.protocolFeeBps(), 5_000, "split fixed");
+        assertEq(launchpad.treasury(), treasury, "treasury fixed");
+        assertEq(launchpad.attestor(), address(this), "attestor fixed");
+        assertEq(launchpad.launchFee(), 0, "launch fee fixed");
+        assertEq(launchpad.referralFeeBps(), 0, "referral rate fixed");
+        assertEq(LaunchToken(token).launchpad(), address(launchpad), "attribution recorded");
     }
 
     function test_tokenIsImmutableFixedSupply() public {

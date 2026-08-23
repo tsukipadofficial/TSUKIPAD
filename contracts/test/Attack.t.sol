@@ -38,7 +38,7 @@ contract AttackTest is Test {
         bytes memory code = vm.getCode(FACTORY_ARTIFACT);
         address f;
         assembly { f := create(0, add(code, 0x20), mload(code)) }
-        launchpad = new ArcLaunchpad(USDC_ADDR, f, FEE, treasury, 5_000);
+        launchpad = new ArcLaunchpad(USDC_ADDR, f, FEE, treasury, 5_000, address(this), 0, 0);
         router = new ArcSwapRouter(f);
         usdc.mint(holder, 500_000e6);
         usdc.mint(attacker, 500_000e6);
@@ -75,35 +75,27 @@ contract AttackTest is Test {
 
     // ---------------- admin surface ----------------
 
-    function test_attackerCannotChangeTreasury() public {
-        vm.prank(attacker);
-        vm.expectRevert();
-        launchpad.setTreasury(attacker);
+    /// @dev These used to assert that an attacker could not reach the setters.
+    ///      There are no setters: the contract has no owner and every
+    ///      configurable value is `immutable`. What is worth asserting now is
+    ///      that the terms a creator launched under cannot move for anybody,
+    ///      which is a stronger statement than "only the owner may move them".
+    function test_configurationCannotBeChangedByAnyone() public view {
+        assertEq(launchpad.treasury(), treasury, "treasury fixed at deployment");
+        assertEq(launchpad.protocolFeeBps(), 5_000, "fee split fixed at deployment");
+        assertEq(launchpad.launchFee(), 0, "launch fee fixed at deployment");
+        assertEq(launchpad.attestor(), address(this), "attestor fixed at deployment");
     }
 
-    function test_attackerCannotChangeProtocolFee() public {
-        vm.prank(attacker);
-        vm.expectRevert();
-        launchpad.setProtocolFeeBps(5_000);
-    }
-
-    function test_attackerCannotChangeLaunchFee() public {
-        vm.prank(attacker);
-        vm.expectRevert();
-        launchpad.setLaunchFee(1);
-    }
-
-    function test_attackerCannotSeizeOwnership() public {
-        vm.prank(attacker);
-        vm.expectRevert();
-        launchpad.transferOwnership(attacker);
-    }
-
-    /// @dev Ownable2Step: a pending owner must accept, so a fat-fingered
-    ///      transfer to a dead address cannot brick the protocol.
-    function test_ownershipTransferNeedsAcceptance() public {
-        launchpad.transferOwnership(attacker);
-        assertEq(launchpad.owner(), owner, "owner unchanged until accepted");
+    /// @dev There is no ownership to transfer or seize. The contract was
+    ///      deployed without an owner rather than renounced afterwards, so
+    ///      there is no window in which one existed and no key that could ever
+    ///      have been stolen. Absence of a function cannot be asserted from
+    ///      Solidity, so this pins the guarantee to the two things that would
+    ///      have been reachable through it.
+    function test_thereIsNoOwnerToSeize() public view {
+        assertEq(launchpad.treasury(), treasury, "treasury unreachable");
+        assertEq(launchpad.protocolFeeBps(), 5_000, "split unreachable");
     }
 
     // ---------------- creator / recipient immutability ----------------
@@ -133,8 +125,8 @@ contract AttackTest is Test {
         assertGt(usdc.balanceOf(creator), 0, "fees went to the recorded creator");
         assertEq(usdc.balanceOf(attacker), attackerBefore, "attacker gained nothing");
 
-        // The claim path cannot touch an ordinary launch, whoever calls it.
-        launchpad.setAttestor(address(this));
+        // The claim path cannot touch an ordinary launch, whoever calls it --
+        // this launchpad's attestor is address(this), set at construction.
         vm.prank(attacker);
         vm.expectRevert(ArcLaunchpad.NotUnclaimed.selector);
         launchpad.claimFeeRecipient(address(t), attacker, uint64(block.timestamp + 1 hours), hex"00");

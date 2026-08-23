@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 import {LaunchToken} from "./LaunchToken.sol";
 import {
@@ -31,13 +30,20 @@ import {TickMath, LiquidityAmounts} from "./libraries/V3Math.sol";
 ///      aggregator or interface from the very first block — there is no
 ///      "graduation" step and no migration risk.
 ///
+///      This contract has no owner. Not renounced -- never created. Every
+///      configurable value is `immutable`, fixed at deployment and unreachable
+///      by anyone afterwards, so there is no key whose loss or theft could
+///      change the fee split, redirect the treasury, or alter the terms a
+///      creator launched under. Changing any of it means deploying a new
+///      launchpad; launches made under this one keep their terms forever.
+///
 ///      Liquidity is permanently locked because this contract owns the position
 ///      and exposes no code path that calls `burn` with non-zero liquidity. The
 ///      principal is not locked by policy or by a timelock that someone can let
 ///      lapse; there is simply no function that can withdraw it. Swap fees
 ///      accrued by the position remain claimable, split between the creator and
 ///      the protocol treasury.
-contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, ReentrancyGuard, Ownable2Step {
+contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // ---------------------------------------------------------------------
@@ -72,6 +78,16 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     ///      it is the only supply that could be dumped on early buyers. Holding
     ///      it briefly means the first minutes of trading cannot be front-run by
     ///      the launcher, without locking founders out of their tokens for good.
+    /// @notice The launchpad this contract is. Read by explorers, scanners and
+    ///         aggregators to attribute a launch without needing a hard-coded
+    ///         address list.
+    /// @dev A constant, so it costs storage nothing and cannot be spoofed by a
+    ///      fork that merely copies the bytecode -- a copy is a different
+    ///      address, and `LaunchToken.launchpad` names the address that actually
+    ///      deployed it.
+    string public constant PAD = "TSUKIPAD";
+    string public constant PAD_URL = "https://tsukipad.com";
+
     uint64 public constant CREATOR_LOCK_DURATION = 30 minutes;
 
     // ---------------------------------------------------------------------
@@ -79,10 +95,15 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     // ---------------------------------------------------------------------
 
     /// @notice Receives the protocol's cut of swap fees.
-    address public treasury;
+    address public immutable treasury;
 
     /// @notice Protocol share of collected swap fees, in bps. Remainder to creator.
-    uint16 public protocolFeeBps;
+    /// @dev Immutable because it is read live when fees are collected. As a
+    ///      mutable value it applied retroactively: changing it would have
+    ///      altered the split on every launch ever made here, including ones
+    ///      whose creators agreed to different terms. Fixed at deployment, the
+    ///      number a creator sees at launch is the number they keep.
+    uint16 public immutable protocolFeeBps;
 
     /// @notice Address permitted to attest that a wallet belongs to the identity
     ///         a launch earmarked its fees for.
@@ -90,7 +111,7 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     ///      narrow: an attestation can only bind an address to a launch whose
     ///      commitment it names, only once, and it can never move fees that have
     ///      already been claimed or redirect an ordinary launch.
-    address public attestor;
+    address public immutable attestor;
 
     /// @notice How long an unclaimed launch is held before the escrow can be swept.
     /// @dev Without this, an earmark nobody ever claims strands the fees forever.
@@ -99,7 +120,7 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     uint64 public constant UNCLAIMED_PERIOD = 365 days;
 
     /// @notice Flat USDC charged to create a launch. Spam control; may be zero.
-    uint256 public launchFee;
+    uint256 public immutable launchFee;
 
     // ---------------------------------------------------------------------
     // Launch registry
@@ -167,7 +188,7 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     /// @dev Paid entirely out of the protocol's share, never the creator's. A
     ///      creator's half is identical whether or not they were referred --
     ///      otherwise being introduced would cost them money.
-    uint16 public referralFeeBps;
+    uint16 public immutable referralFeeBps;
 
     uint16 public constant MAX_REFERRAL_FEE_BPS = 2_000; // 20%
 
@@ -200,12 +221,7 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     event BoughtBackAndBurned(address indexed token, uint256 usdcSpent, uint256 tokensBurned);
     event CreatorAllocationClaimed(address indexed token, address indexed creator, uint256 amount);
     event FeesCollected(address indexed token, uint256 creatorToken, uint256 creatorUsdc, uint256 protocolToken, uint256 protocolUsdc);
-    event TreasuryUpdated(address treasury);
-    event ProtocolFeeUpdated(uint16 bps);
-    event LaunchFeeUpdated(uint256 fee);
-    event ReferralFeeUpdated(uint16 bps);
     event ReferralPaid(address indexed token, address indexed referrer, uint256 usdcAmount);
-    event AttestorUpdated(address attestor);
     event FeeRecipientClaimed(address indexed token, address indexed recipient, uint256 tokenAmount, uint256 usdcAmount);
     event UnclaimedFeesSwept(address indexed token, uint256 tokenAmount, uint256 usdcAmount);
 
@@ -235,10 +251,24 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     error SelfReferral();
     error ReferralFeeTooHigh();
 
-    constructor(address usdc_, address factory_, uint24 poolFee_, address treasury_, uint16 protocolFeeBps_)
-        Ownable(msg.sender)
-    {
+    constructor(
+        address usdc_,
+        address factory_,
+        uint24 poolFee_,
+        address treasury_,
+        uint16 protocolFeeBps_,
+        address attestor_,
+        uint256 launchFee_,
+        uint16 referralFeeBps_
+    ) {
         if (protocolFeeBps_ > MAX_PROTOCOL_FEE_BPS) revert FeeTooHigh();
+        if (referralFeeBps_ > MAX_REFERRAL_FEE_BPS || referralFeeBps_ > protocolFeeBps_) {
+            revert ReferralFeeTooHigh();
+        }
+        // Every one of these is permanent from here, so a zero address is not a
+        // mistake that can be corrected later -- it is a launchpad that can
+        // never pay its treasury, or one whose earmarks can never be claimed.
+        if (treasury_ == address(0) || attestor_ == address(0)) revert ZeroRecipient();
 
         USDC = usdc_;
         v3Factory = IUniswapV3Factory(factory_);
@@ -250,6 +280,9 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
 
         treasury = treasury_;
         protocolFeeBps = protocolFeeBps_;
+        attestor = attestor_;
+        launchFee = launchFee_;
+        referralFeeBps = referralFeeBps_;
     }
 
     // ---------------------------------------------------------------------
@@ -805,11 +838,15 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     }
 
     /// @notice Sweep the escrow of a launch nobody claimed, after UNCLAIMED_PERIOD.
+    /// @dev Permissionless. With no owner there is nobody privileged to call it,
+    ///      and the destination is hard-coded to the treasury rather than taken
+    ///      from the caller -- so opening it up lets anyone pay the gas to
+    ///      unstick a dead escrow without letting anyone redirect a penny.
     /// @dev Deliberately pays the treasury and not the creator: paying the creator
     ///      would make inventing a recipient who never appears profitable. The
     ///      launch stays claimable afterwards, so a recipient who turns up late
     ///      still receives everything the position earns from then on.
-    function sweepUnclaimedFees(address token) external onlyOwner nonReentrant {
+    function sweepUnclaimedFees(address token) external nonReentrant {
         uint256 idxPlusOne = _launchIndexPlusOne[token];
         if (idxPlusOne == 0) revert NotALaunch();
         Launch memory l = launches[idxPlusOne - 1];
@@ -827,35 +864,8 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         emit UnclaimedFeesSwept(token, owedToken, owedUsdc);
     }
 
-    /// @notice Set the referral share for future launches, in bps of swap fees.
-    /// @dev Bounded by the protocol's own share: the referral is carved out of
-    ///      it, so a higher rate would leave the treasury owing more than it
-    ///      takes. Existing launches keep the rate they were created with.
-    function setReferralFeeBps(uint16 bps) external onlyOwner {
-        if (bps > MAX_REFERRAL_FEE_BPS || bps > protocolFeeBps) revert ReferralFeeTooHigh();
-        referralFeeBps = bps;
-        emit ReferralFeeUpdated(bps);
-    }
 
-    /// @notice Set the address permitted to attest wallet ownership of an identity.
-    function setAttestor(address attestor_) external onlyOwner {
-        attestor = attestor_;
-        emit AttestorUpdated(attestor_);
-    }
 
-    function setTreasury(address treasury_) external onlyOwner {
-        treasury = treasury_;
-        emit TreasuryUpdated(treasury_);
-    }
 
-    function setProtocolFeeBps(uint16 bps) external onlyOwner {
-        if (bps > MAX_PROTOCOL_FEE_BPS) revert FeeTooHigh();
-        protocolFeeBps = bps;
-        emit ProtocolFeeUpdated(bps);
-    }
 
-    function setLaunchFee(uint256 fee) external onlyOwner {
-        launchFee = fee;
-        emit LaunchFeeUpdated(fee);
-    }
 }
