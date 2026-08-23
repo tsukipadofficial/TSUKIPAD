@@ -10,8 +10,8 @@ import { readFileSync } from "node:fs";
 import { launchpadAbi, swapRouterAbi, erc20Abi } from "../lib/abi";
 
 const RPC = "https://rpc.testnet.arc.io";
-const LAUNCHPAD = "0x0887CB9E7Da9488055F62800d22Ad2aAB57e4504" as const;
-const ROUTER = "0x5920274784685bEF0Ad09C18c2380f9244882c09" as const;
+const LAUNCHPAD = "0xdd173E00598572b2FB16489794406bA0B35f468A" as const;
+const ROUTER = "0xde0025764f8f14B55f2018B5d5F40F828aF3e5ab" as const;
 const USDC = "0x3600000000000000000000000000000000000000" as const;
 const TOKEN = "0x21659D1A81284B1b84fd7FB176A8479538cC1A1d" as const;
 

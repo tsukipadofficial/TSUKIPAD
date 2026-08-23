@@ -192,23 +192,42 @@ export function predictTokenAddress(
   });
 }
 
-/// Find a salt whose token address sorts below USDC, making the token `token0`.
+/// Every token launched here ends in these hex digits, as a house mark: an
+/// address is the one part of a launch that is visible everywhere, in every
+/// explorer and every bot, without anyone having to ask what made it.
+///
+/// Set to "" to mine for ordering alone. Digits only is deliberate -- checksum
+/// casing varies by how an address is rendered, and a suffix of digits reads
+/// the same in all of them.
+export const VANITY_SUFFIX = "272";
+
+/// Find a salt whose token address sorts below USDC, making the token `token0`,
+/// and ends in `VANITY_SUFFIX`.
 ///
 /// The entire single-sided launch depends on that ordering: a token0 position
 /// above spot holds only tokens, which is what lets the creator seed the pool
 /// without a cent of USDC. Roughly 21% of addresses qualify (any first byte
-/// below 0x36), so this converges within a handful of attempts.
+/// below 0x36); the suffix costs a further 1 in 4,096, so the two together land
+/// about one salt in 19,400.
+///
+/// Measured over 20 launches: mean 17.4k attempts (~0.9s), median 13.8k, worst
+/// 55.7k (~2.9s). The cap is set far above that because the cost of one more
+/// wasted millisecond is nothing next to a launch that refuses to proceed --
+/// at 20,000 it would have failed about half the time.
 export function mineSalt(
   launchpad: Address,
   creator: Address,
   initCodeHash: Hex,
-  maxAttempts = 20_000,
+  maxAttempts = 1_000_000,
 ): { salt: Hex; token: Address; attempts: number } {
   const usdc = BigInt(USDC_ADDRESS);
+  const suffix = VANITY_SUFFIX.toLowerCase();
   for (let i = 0; i < maxAttempts; i++) {
     const salt = `0x${i.toString(16).padStart(64, "0")}` as Hex;
     const token = predictTokenAddress(launchpad, creator, salt, initCodeHash);
-    if (BigInt(token) < usdc) return { salt, token, attempts: i + 1 };
+    if (BigInt(token) >= usdc) continue;
+    if (suffix && !token.toLowerCase().endsWith(suffix)) continue;
+    return { salt, token, attempts: i + 1 };
   }
   throw new Error("no qualifying salt found");
 }

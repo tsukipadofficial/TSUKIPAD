@@ -28,7 +28,7 @@ import {
 } from "../lib/launch-math";
 
 const RPC = "https://rpc.testnet.arc.io";
-const LAUNCHPAD = "0xe71877119585Ab59A12B95ED35A023280476d5Dc" as const;
+const LAUNCHPAD = "0xdd173E00598572b2FB16489794406bA0B35f468A" as const;
 
 function loadKey(): `0x${string}` {
   const env = readFileSync(new URL("../../.secrets/deployer.env", import.meta.url), "utf8");
