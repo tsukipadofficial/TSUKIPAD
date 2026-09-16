@@ -423,6 +423,7 @@ const STRINGS = {
   "trade.buySym": { en: "Buy {sym}", ja: "{sym}を買う" },
   "trade.sellSym": { en: "Sell {sym}", ja: "{sym}を売る" },
   "trade.wrongNetwork": { en: "Wrong network", ja: "ネットワークが違います" },
+  "trade.noRoute": { en: "The pool cannot fill a trade this size right now.", ja: "現在、このサイズの取引をプールで約定できません。" },
   "trade.overBalance": { en: "That is more than your balance.", ja: "残高を超えています。" },
   "trade.nothingToSellInto": { en: "No USDC in the pool to sell into — someone has to buy first.", ja: "プールにUSDCがないため売却できません。まず誰かが購入する必要があります。" },
   "trade.quoteUnavailable": { en: "Quote unavailable — check balance and approval.", ja: "見積もりを取得できません。残高と承認をご確認ください。" },

@@ -12,8 +12,9 @@ import {
 } from "wagmi";
 
 import { Button, Card, cx } from "./ui";
-import { erc20Abi, swapRouterAbi } from "@/lib/abi";
+import { erc20Abi, quoterAbi, swapRouterAbi } from "@/lib/abi";
 import {
+  QUOTER_ADDRESS,
   SWAP_ROUTER_ADDRESS,
   USDC_ADDRESS,
   USDC_DECIMALS,
@@ -82,9 +83,16 @@ export function TradePanel({ launch }: { launch: LaunchView }) {
   const needsApproval = allowance !== undefined && (allowance as bigint) < amountIn;
 
   // --- quoting -----------------------------------------------------------
-  // Static-call the router rather than deploying Uniswap's Quoter: the router's
-  // exactInputSingle returns the output amount, so simulating it gives an exact
-  // quote including fees and price impact, with no extra contract to maintain.
+  // Quoted through Uniswap's quoter, not by simulating our own router.
+  //
+  // The router pulls the input token from the caller, so simulating it needs a
+  // balance *and* an allowance -- which a trader about to make their first
+  // trade has neither of. Every one of those quotes failed, and the panel
+  // reported it as "check balance and approval" over a wallet that was fine:
+  // the approval it wanted was the one the button underneath was offering.
+  // The quoter moves no money, so it prices a trade for anybody, including
+  // somebody holding none of the token yet. Verified against the router on a
+  // live pool: identical to the last decimal.
   useEffect(() => {
     if (!publicClient || amountIn === 0n) {
       setQuote(null);
@@ -97,28 +105,25 @@ export function TradePanel({ launch }: { launch: LaunchView }) {
       setQuoteError(null);
       try {
         const { result } = await publicClient.simulateContract({
-          address: SWAP_ROUTER_ADDRESS,
-          abi: swapRouterAbi,
-          functionName: "exactInputSingle",
+          address: QUOTER_ADDRESS,
+          abi: quoterAbi,
+          functionName: "quoteExactInputSingle",
           args: [
             {
-              key: poolKeyFor(launch.token),
+              poolKey: poolKeyFor(launch.token),
               zeroForOne: tokenIn !== USDC_ADDRESS,
-              amountIn,
-              amountOutMinimum: 0n,
-              recipient: address ?? "0x000000000000000000000000000000000000dEaD",
-              deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
+              exactAmount: amountIn,
+              hookData: "0x",
             },
           ],
-          account: address ?? "0x000000000000000000000000000000000000dEaD",
         });
-        if (!cancelled) setQuote(result as bigint);
+        if (!cancelled) setQuote((result as readonly [bigint, bigint])[0]);
       } catch {
         if (!cancelled) {
-          // Most commonly: the account holds no balance/allowance yet, so the
-          // simulation cannot pull tokens. Surface it as "no quote", not an error.
+          // Now a real answer: this pool cannot fill a trade that size in that
+          // direction, whatever the trader happens to hold.
           setQuote(null);
-          setQuoteError("quote-unavailable");
+          setQuoteError("no-route");
         }
       } finally {
         if (!cancelled) setQuoting(false);
@@ -129,7 +134,7 @@ export function TradePanel({ launch }: { launch: LaunchView }) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [publicClient, amountIn, tokenIn, tokenOut, address]);
+  }, [publicClient, amountIn, tokenIn, launch.token]);
 
   const receipt = useWaitForTransactionReceipt({ hash: txHash });
   useEffect(() => {
@@ -346,7 +351,7 @@ export function TradePanel({ launch }: { launch: LaunchView }) {
               ? t("trade.overBalance")
               : side === "sell" && launch.curveProgress <= 0
                 ? t("trade.nothingToSellInto")
-                : t("trade.quoteUnavailable")}
+                : t("trade.noRoute")}
           </p>
         ) : null}
 
