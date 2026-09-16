@@ -202,18 +202,26 @@ export function predictTokenAddress(
 export const VANITY_SUFFIX = "272";
 
 /// Find a salt whose token address sorts below USDC, making the token `token0`,
-/// and ends in `VANITY_SUFFIX`.
+/// and -- when it can -- ends in `VANITY_SUFFIX`.
 ///
-/// The entire single-sided launch depends on that ordering: a token0 position
-/// above spot holds only tokens, which is what lets the creator seed the pool
-/// without a cent of USDC. Roughly 21% of addresses qualify (any first byte
-/// below 0x36); the suffix costs a further 1 in 4,096, so the two together land
-/// about one salt in 19,400.
+/// Only the ordering is a hard requirement. The entire single-sided launch
+/// depends on it: a token0 position above spot holds only tokens, which is what
+/// lets the creator seed the pool without a cent of USDC. Roughly 21% of
+/// addresses qualify (any first byte below 0x36). The suffix is a house mark and
+/// nothing more -- the contracts never check it -- so a launch must never fail
+/// for want of one. If the suffix search runs past its budget the launch goes
+/// out on the first ordering-valid address found instead, and `vanity` says so.
 ///
-/// Measured over 20 launches: mean 17.4k attempts (~0.9s), median 13.8k, worst
-/// 55.7k (~2.9s). The cap is set far above that because the cost of one more
-/// wasted millisecond is nothing next to a launch that refuses to proceed --
-/// at 20,000 it would have failed about half the time.
+/// The suffix costs a further 1 in 4,096, so the two together land about one
+/// salt in 19,400. Measured over 20 launches: mean 17.4k attempts (~0.9s),
+/// median 13.8k, worst 55.7k (~2.9s). The budget sits far above that so the
+/// fallback is for slow phones and bad luck, not the ordinary case.
+///
+/// The search starts from a random salt rather than zero. From zero, a creator
+/// launching the same name, symbol and metadata twice mined the identical
+/// address both times -- one the first launch already occupied -- and the second
+/// launch reverted on the CREATE2 collision.
+///
 /// `deployer` is whichever contract runs the CREATE2 -- the pads hand that job
 /// to TokenDeployer, so passing a pad here would mine a salt for an address no
 /// launch will ever land on.
@@ -222,15 +230,37 @@ export function mineSalt(
   creator: Address,
   initCodeHash: Hex,
   maxAttempts = 1_000_000,
-): { salt: Hex; token: Address; attempts: number } {
+  vanityBudget = 300_000,
+  start: bigint = randomSaltStart(),
+): { salt: Hex; token: Address; attempts: number; vanity: boolean } {
   const usdc = BigInt(USDC_ADDRESS);
   const suffix = VANITY_SUFFIX.toLowerCase();
+  let fallback: { salt: Hex; token: Address; attempts: number } | null = null;
+
   for (let i = 0; i < maxAttempts; i++) {
-    const salt = `0x${i.toString(16).padStart(64, "0")}` as Hex;
+    const salt = `0x${((start + BigInt(i)) & MAX_SALT).toString(16).padStart(64, "0")}` as Hex;
     const token = predictTokenAddress(deployer, creator, salt, initCodeHash);
     if (BigInt(token) >= usdc) continue;
-    if (suffix && !token.toLowerCase().endsWith(suffix)) continue;
-    return { salt, token, attempts: i + 1 };
+
+    if (!suffix || token.toLowerCase().endsWith(suffix)) {
+      return { salt, token, attempts: i + 1, vanity: !!suffix };
+    }
+    fallback ??= { salt, token, attempts: i + 1 };
+    // Out of patience for the house mark: launch on a plain address instead.
+    if (i + 1 >= vanityBudget) return { ...fallback, vanity: false };
   }
+  if (fallback) return { ...fallback, vanity: false };
   throw new Error("no qualifying salt found");
+}
+
+const MAX_SALT = (1n << 256n) - 1n;
+
+/// A random 256-bit starting point. Falls back to time-derived entropy where
+/// Web Crypto is unavailable; collisions only need to be improbable, not secret.
+function randomSaltStart(): bigint {
+  const bytes = new Uint8Array(32);
+  const c = (globalThis as { crypto?: Crypto }).crypto;
+  if (c?.getRandomValues) c.getRandomValues(bytes);
+  else for (let i = 0; i < 32; i++) bytes[i] = Math.floor(Math.random() * 256);
+  return BigInt(`0x${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`);
 }

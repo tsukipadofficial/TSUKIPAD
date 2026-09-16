@@ -49,6 +49,26 @@ import { encodeMetadata, beneficiaryLink } from "@/lib/metadata";
 import { formatUsd, formatUnitsFloat } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 
+
+/// Mine a launch address, then make sure nothing already lives there.
+///
+/// The search starts from a random salt, so a collision should never happen;
+/// this is the belt to that pair of braces. An occupied address would make the
+/// launch revert after the creator had already paid for it, so it is checked
+/// here, for free, and mined again.
+async function mineFreshSalt(
+  client: { getCode: (a: { address: Address }) => Promise<Hex | undefined> },
+  creator: Address,
+  initCodeHash: Hex,
+): Promise<{ salt: Hex; token: Address; attempts: number; vanity: boolean }> {
+  for (let tries = 0; tries < 3; tries++) {
+    const found = mineSalt(TOKEN_DEPLOYER_ADDRESS, creator, initCodeHash);
+    const code = await client.getCode({ address: found.token });
+    if (!code || code === "0x") return found;
+  }
+  throw new Error("could not find a free token address");
+}
+
 export default function CreatePage() {
   const t = useT();
   const router = useRouter();
@@ -263,7 +283,7 @@ export default function CreatePage() {
       })) as Hex;
 
       setStatus(t("status.mining"));
-      const { salt, token, attempts } = mineSalt(TOKEN_DEPLOYER_ADDRESS, address, initCodeHash);
+      const { salt, token, attempts } = await mineFreshSalt(publicClient, address, initCodeHash);
       setStatus(t("status.found", { addr: token.slice(0, 10), n: attempts }));
 
       // A developer buy is pulled by the curve inside the launch transaction,
@@ -343,7 +363,7 @@ export default function CreatePage() {
       })) as Hex;
 
       setStatus(t("status.mining"));
-      const { salt, token, attempts } = mineSalt(TOKEN_DEPLOYER_ADDRESS, address, initCodeHash);
+      const { salt, token, attempts } = await mineFreshSalt(publicClient, address, initCodeHash);
       setStatus(t("status.found", { addr: token.slice(0, 10), n: attempts }));
 
       // The pad pulls the developer buy out of the creator's wallet inside
