@@ -478,11 +478,18 @@ contract ArcLaunchpad is TsukiV4Pool, ReentrancyGuard {
         PoolKey memory key = _key(l.token, USDC, poolFee, tickSpacing);
         (uint256 owed0, uint256 owed1) = _collect(key, l.tickLower, l.tickUpper);
 
-        // The creator tax the hook has been holding comes home in the same call.
-        // It is not split with the treasury -- all of it is the creator's -- but
-        // it follows the same routing, so a holders launch pays holders and an
-        // unproven earmark escrows instead of stranding.
-        (uint256 tax0, uint256 tax1) = _pullHookTax(key, token);
+        // The creator tax the hook has been holding comes home in the same call
+        // and joins the pool fee, which means it is split with the treasury and
+        // routed on exactly the same terms -- the treasury earns its share of
+        // everything a trader pays whatever rate the creator picked, a holders
+        // launch pays holders, and an unproven earmark escrows rather than
+        // stranding. Scoped so the two locals do not survive into the rest of
+        // this function, which is already at the stack limit under via-ir.
+        {
+            (uint256 tax0, uint256 tax1) = _pullHookTax(key, token);
+            owed0 += tax0;
+            owed1 += tax1;
+        }
 
         // The token side is converted to USDC before anything is split, so every
         // payout is denominated in USDC and nobody is left holding a bag of a
@@ -556,9 +563,6 @@ contract ArcLaunchpad is TsukiV4Pool, ReentrancyGuard {
             }
         }
         if (protocol0 > 0) IERC20(l.token).safeTransfer(treasury, protocol0);
-
-        creator0 += tax0;
-        creator1 += tax1;
 
         // USDC-side fees follow the mode chosen at launch.
         if (creator1 > 0) {

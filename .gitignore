@@ -34,3 +34,4 @@ marketing/frames*/
 marketing/*.wav
 __pycache__/
 *.pyc
+.env*.local

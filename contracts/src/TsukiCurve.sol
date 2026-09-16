@@ -63,7 +63,9 @@ contract TsukiCurve is TsukiV4Pool, ReentrancyGuard {
     uint16 public constant MAX_PROTOCOL_FEE_BPS = 5_000; // 50% of fees
 
     /// @notice Ceiling on the extra fee a creator may add to curve trades, in bps.
-    /// @dev Paid wholly to the creator's fee recipient, on top of the base fee.
+    /// @dev Charged on top of the base fee and split with the treasury on the
+    ///      same terms, so the treasury earns `protocolFeeBps` of every cent a
+    ///      trader pays regardless of what rate a creator picks.
     ///      It applies on the curve and, through the hook the pool is opened
     ///      with, on every swap after graduation too -- the rate a buyer pays
     ///      does not change the day a launch graduates.
@@ -368,10 +370,12 @@ contract TsukiCurve is TsukiV4Pool, ReentrancyGuard {
 
     /// @dev Split a curve trade's fee. The base fee is shared with the protocol;
     ///      the creator tax, being the creator's own addition, is not.
+    /// @dev The base fee and the creator tax are split the same way, so a
+    ///      creator's rate never changes what the treasury earns per trade as a
+    ///      share -- it is always `protocolFeeBps` of everything traders pay.
     function _accrueTradeFee(Curve storage c, uint256 fee) private {
         if (fee == 0) return;
-        uint256 base = FullMath.mulDiv(fee, tradeFeeBps, _feeBps(c));
-        uint256 protocol = (base * protocolFeeBps) / 10_000;
+        uint256 protocol = (fee * protocolFeeBps) / 10_000;
         protocolFeesOwed += protocol;
         creatorFeesOwed[c.token] += fee - protocol;
     }
@@ -528,9 +532,14 @@ contract TsukiCurve is TsukiV4Pool, ReentrancyGuard {
             protocolFeesOwed += protocol;
             creatorFeesOwed[token] += usdc - protocol;
         }
-        // The tax is the creator's in full, and rides the same claim path, so a
-        // holders launch still pays holders.
-        if (tax1 > 0) creatorFeesOwed[token] += tax1;
+        // The pool-side tax is split like everything else and rides the same
+        // claim path, so a holders launch still pays holders.
+        if (tax1 > 0) {
+            uint256 taxProtocol = (tax1 * protocolFeeBps) / 10_000;
+            protocolFeesOwed += taxProtocol;
+            creatorFeesOwed[token] += tax1 - taxProtocol;
+        }
+        // The token side joins `unsold`, which is already split below.
         if (tax0 > 0) unsold += tax0;
         if (unsold > 0) {
             uint256 protocolTokens = (unsold * protocolFeeBps) / 10_000;

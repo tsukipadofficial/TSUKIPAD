@@ -138,4 +138,8 @@ export const isCurveDeployed =
 /// Defaults the create form starts from.
 export const DEFAULT_SUPPLY = 1_000_000_000n; // 1B whole tokens
 export const DEFAULT_START_MCAP_USD = 2_500;
-export const DEFAULT_CEILING_MULTIPLE = 10_000;
+/// Top of a direct launch's liquidity range, as a multiple of the opening
+/// market cap. 1,000,000x puts the ceiling near $2.5B from a $2.5K open, which
+/// is the headroom a launch that runs needs; the tick it lands on is still far
+/// inside Uniswap's bounds. Above the ceiling every token has been bought.
+export const DEFAULT_CEILING_MULTIPLE = 1_000_000;

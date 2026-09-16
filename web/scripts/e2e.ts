@@ -18,6 +18,7 @@ import { readFileSync } from "node:fs";
 
 import { launchpadAbi, launchTokenAbi, swapRouterAbi, stateViewAbi, erc20Abi } from "../lib/abi";
 import { poolKeyFor as poolKey, poolIdFor as poolId } from "../lib/v4";
+import { DEFAULT_CEILING_MULTIPLE } from "../lib/config";
 import { mineSalt, startTickForMarketCap, ceilingTick, marketCapAtTick, curveCapacityUsd } from "../lib/launch-math";
 import { encodeMetadata, decodeMetadata } from "../lib/metadata";
 
@@ -84,7 +85,7 @@ async function main() {
     telegram: "t.me/tsukipadofficial",
   });
   const tickLower = startTickForMarketCap(3_000, supply);
-  const tickUpper = ceilingTick(tickLower, 10_000);
+  const tickUpper = ceilingTick(tickLower, DEFAULT_CEILING_MULTIPLE);
   const ALLOCATION_BPS = 1_000; // 10%, to exercise the creator lock
 
   const initCodeHash = (await pub.readContract({

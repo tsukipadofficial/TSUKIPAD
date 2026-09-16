@@ -140,8 +140,11 @@ export default function CreatePage() {
   const splitProtocolBps = onCurve
     ? (curveConfig?.protocolFeeBps ?? 3_000)
     : ((padProtocolBps as number | undefined) ?? 3_000);
+  // The tax is split on the same terms as the base fee, so the creator's cut is
+  // one share of everything a trader pays rather than the whole tax plus a
+  // share of the base.
   const totalFeeBps = baseFeeBps + creatorTaxBps;
-  const yoursBps = (baseFeeBps * (10_000 - splitProtocolBps)) / 10_000 + creatorTaxBps;
+  const yoursBps = (totalFeeBps * (10_000 - splitProtocolBps)) / 10_000;
   const pct = (bps: number) => `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 2)}%`;
   const protocolBps = onCurve
     ? curveConfig?.protocolFeeBps

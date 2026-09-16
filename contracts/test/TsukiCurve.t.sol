@@ -396,7 +396,7 @@ contract TsukiCurveTest is TsukiTestBase {
     // Fees
     // ------------------------------------------------------------------
 
-    function test_baseFeeSplitsAndCreatorTaxGoesToRecipient() public {
+    function test_baseFeeAndCreatorTaxSplitOnTheSameTerms() public {
         TsukiCurve.LaunchParams memory p = _params(0);
         p.creatorTaxBps = 200; // +2%
         p.feeRecipient = team;
@@ -404,14 +404,15 @@ contract TsukiCurveTest is TsukiTestBase {
         vm.warp(vm.getBlockTimestamp() + 10);
 
         _buy(alice, token, 1_000e6);
-        // 3% total = $30: $5 protocol (half the 1% base), $25 recipient.
-        assertEq(curve.protocolFeesOwed(), 5e6);
-        assertEq(curve.creatorFeesOwed(token), 25e6);
+        // 3% total = $30, split 50/50 in this suite's config: the tax is not a
+        // way around the treasury's share, it rides the same split as the base.
+        assertEq(curve.protocolFeesOwed(), 15e6);
+        assertEq(curve.creatorFeesOwed(token), 15e6);
 
         curve.claimCreatorFees(token);
-        assertEq(usdc.balanceOf(team), 25e6);
+        assertEq(usdc.balanceOf(team), 15e6);
         curve.sweepProtocolFees();
-        assertEq(usdc.balanceOf(treasury), 5e6);
+        assertEq(usdc.balanceOf(treasury), 15e6);
         _assertSolvent(token);
     }
 
