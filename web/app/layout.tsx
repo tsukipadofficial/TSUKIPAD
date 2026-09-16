@@ -86,8 +86,8 @@ export const metadata: Metadata = {
 /// visit; a later toggle is a live DOM change this static value cannot follow.
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f2f1ea" },
-    { media: "(prefers-color-scheme: dark)", color: "#08080a" },
+    // The page opens dark whatever the OS prefers, so the browser chrome does too.
+    { color: "#08080a" },
   ],
 };
 

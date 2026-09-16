@@ -11,13 +11,14 @@ const STORAGE_KEY = `${STORAGE_PREFIX}.theme`;
 /// rules out doing it in an effect, so it is a blocking inline script — the one
 /// place in the app where that is worth the cost.
 ///
-/// Dark is the default: it is what the site was, and what anyone without a
-/// stored choice or a light OS preference should keep seeing.
+/// Dark is the default, full stop: it is what the site is, and a first visit
+/// opens on it whatever the OS prefers. Light is only ever an explicit choice,
+/// made with the toggle and remembered from then on.
 ///
 /// This file stays free of React so the server layout can import the string.
 export const THEME_INIT_SCRIPT = `(function(){var t=null;try{t=localStorage.getItem(${JSON.stringify(
   STORAGE_KEY,
-)})}catch(e){}if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"}document.documentElement.dataset.theme=t})()`;
+)})}catch(e){}if(t!=="light"&&t!=="dark"){t="dark"}document.documentElement.dataset.theme=t})()`;
 
 /// Subscribers live outside React so the header's toggle and the sign-in
 /// modal's appearance can share one value without a provider around both.
