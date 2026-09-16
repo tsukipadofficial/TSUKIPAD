@@ -8,6 +8,7 @@ import {TsukiCurve} from "../src/TsukiCurve.sol";
 import {LaunchToken} from "../src/LaunchToken.sol";
 import {TsukiTestBase} from "./TsukiTestBase.sol";
 import {Currency} from "v4-core/types/Currency.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @notice Where the hook's creator tax actually ends up.
 ///
@@ -160,6 +161,27 @@ contract TaxRoutingTest is TsukiTestBase {
         launchpad.launch(p);
 
         assertEq(IERC20(USDC_ADDR).balanceOf(address(launchpad)), 0, "nothing launched");
+    }
+
+    /// @dev Integrators are given one address to watch. That only works if the
+    ///      factory actually announces what it deployed -- both pads route
+    ///      through it, but it used to emit nothing at all.
+    function test_everyLaunchIsAnnouncedByTheOneFactory() public {
+        vm.recordLogs();
+        address token = _launch(false, bytes32(0), 0);
+
+        bytes32 sig = keccak256("TokenDeployed(address,address,address,bool,string,string)");
+        bool found;
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].emitter == address(tokenDeployer) && logs[i].topics[0] == sig) {
+                assertEq(address(uint160(uint256(logs[i].topics[1]))), token, "names the token");
+                assertEq(address(uint160(uint256(logs[i].topics[2]))), address(launchpad), "names the pad");
+                assertEq(address(uint160(uint256(logs[i].topics[3]))), creator, "names the creator");
+                found = true;
+            }
+        }
+        assertTrue(found, "the factory announced the launch");
     }
 
     /// @dev A fee recipient that cannot receive USDC used to take the treasury's

@@ -19,6 +19,17 @@ import {CurveToken} from "./CurveToken.sol";
 ///      the pad is part of the creation code, so a different caller lands at a
 ///      different address.
 contract TokenDeployer {
+    /// @notice Every launch, from either pad, in one place.
+    /// @dev Both pads deploy through here, so this is the single address an
+    ///      indexer or a trading bot can watch to see every TSUKIPAD launch --
+    ///      without it they would have to know about, and keep up with, each pad
+    ///      separately. `curve` says which shape the launch is: a curve launch
+    ///      trades on the pad until it graduates, a direct one is in a Uniswap
+    ///      pool from this block.
+    event TokenDeployed(
+        address indexed token, address indexed pad, address indexed creator, bool curve, string name, string symbol
+    );
+
     /// @notice Deploy a direct-launch token. Its pad is the caller.
     function deployLaunchToken(
         bytes32 salt,
@@ -30,12 +41,13 @@ contract TokenDeployer {
         address rewardToken,
         bool rewardsEnabled,
         address taxCollector
-    ) external returns (address) {
-        return address(
+    ) external returns (address token) {
+        token = address(
             new LaunchToken{salt: salt}(
                 name, symbol, totalSupply, metadataURI, creator, rewardToken, rewardsEnabled, msg.sender, taxCollector
             )
         );
+        emit TokenDeployed(token, msg.sender, creator, false, name, symbol);
     }
 
     /// @notice Deploy a bonding-curve token. Its pad is the caller.
@@ -49,12 +61,13 @@ contract TokenDeployer {
         address rewardToken,
         bool rewardsEnabled,
         address taxCollector
-    ) external returns (address) {
-        return address(
+    ) external returns (address token) {
+        token = address(
             new CurveToken{salt: salt}(
                 name, symbol, totalSupply, metadataURI, creator, rewardToken, rewardsEnabled, msg.sender, taxCollector
             )
         );
+        emit TokenDeployed(token, msg.sender, creator, true, name, symbol);
     }
 
     /// @dev The hashes a pad needs to predict a token's address, and that the
