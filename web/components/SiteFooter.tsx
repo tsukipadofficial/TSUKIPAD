@@ -2,6 +2,7 @@
 
 import { useT } from "@/lib/i18n";
 import { X_URL, TELEGRAM_URL } from "@/lib/brand";
+import { IS_MAINNET } from "@/lib/config";
 
 /// Official accounts. Rendered from brand.ts so a handle change never means
 /// hunting through components.
@@ -16,7 +17,7 @@ export function SiteFooter() {
     <footer className="mt-20 border-t-2 border-line px-5 py-8">
       <div className="mx-auto max-w-7xl space-y-3 text-xs text-faint">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="tabular">{t("footer.chain")}</p>
+          <p className="tabular">{t(IS_MAINNET ? "footer.chain.mainnet" : "footer.chain")}</p>
           <div className="flex items-center gap-4">
             {SOCIALS.map((s) => (
               <a
@@ -31,7 +32,7 @@ export function SiteFooter() {
             ))}
           </div>
         </div>
-        <p className="max-w-xl">{t("footer.disclaimer")}</p>
+        <p className="max-w-xl">{t(IS_MAINNET ? "footer.disclaimer.mainnet" : "footer.disclaimer")}</p>
         {/* Attribution and an explicit non-affiliation line, both required by
             the Arc Brand Guidelines so the relationship cannot read as an
             endorsement. */}

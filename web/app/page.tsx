@@ -7,7 +7,7 @@ import { LaunchCard } from "@/components/LaunchCard";
 import { Badge, Button, Card, LiveDot, Skeleton, cx } from "@/components/ui";
 import { useLaunches, type LaunchView } from "@/lib/hooks";
 import { useCurveLaunches } from "@/lib/curve";
-import { isDeployed, isCurveDeployed, EXPLORER_URL } from "@/lib/config";
+import { isDeployed, isCurveDeployed, EXPLORER_URL, IS_MAINNET } from "@/lib/config";
 import { formatUsd } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 
@@ -168,7 +168,7 @@ function Hero({ count, totalCap }: { count: number; totalCap: number }) {
         <div>
           <div className="mb-4 flex items-center gap-2">
             <Badge tone="lime">
-              <LiveDot /> {t("hero.badge.testnet")}
+              <LiveDot /> {t(IS_MAINNET ? "hero.badge.mainnet" : "hero.badge.testnet")}
             </Badge>
             <Badge tone="cyan">Uniswap V3</Badge>
           </div>
@@ -271,9 +271,9 @@ function NotDeployed() {
       </p>
       <pre className="tabular mt-4 overflow-x-auto border-2 border-line bg-void p-4 text-xs text-lime">
 {`cd contracts
-PRIVATE_KEY=0xyour_testnet_key \\
+PRIVATE_KEY=0xyour_key \\
   forge script script/Deploy.s.sol:Deploy \\
-  --rpc-url arc_testnet --broadcast
+  --rpc-url <arc rpc> --broadcast
 
 # then copy the printed addresses into web/.env.local
 NEXT_PUBLIC_LAUNCHPAD_ADDRESS=0x...

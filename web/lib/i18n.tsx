@@ -34,6 +34,7 @@ const STRINGS = {
   "nav.light": { en: "Light", ja: "ライト" },
 
   "footer.chain": { en: "Built on Arc Network · Arc Testnet · chain 5042002", ja: "Arc Network上に構築 · Arcテストネット · チェーン 5042002" },
+  "footer.chain.mainnet": { en: "Built on Arc Network · Arc Mainnet · chain 5042", ja: "Arc Network上に構築 · Arcメインネット · チェーン 5042" },
   /// Required by the Arc Brand Guidelines and Partner Toolkit. Kept in English
   /// in both locales because it is a legal attribution, not UI copy.
   "footer.trademark": {
@@ -44,6 +45,10 @@ const STRINGS = {
     en: "An independent project. Not built, operated or reviewed by Circle.",
     ja: "独立したプロジェクトです。Circle による開発・運営・審査は受けていません。",
   },
+  "footer.disclaimer.mainnet": {
+    en: "Tokens launched here are created by anyone and can lose all their value. Liquidity is locked permanently by contract — but that is not a substitute for your own research.",
+    ja: "ここで発行されるトークンは誰でも作成でき、価値をすべて失う可能性があります。流動性はコントラクトにより恒久的にロックされますが、ご自身での調査に代わるものではありません。",
+  },
   "footer.disclaimer": {
     en: "Testnet only. Tokens launched here have no value. Liquidity is locked permanently by contract — but that is not a substitute for your own research.",
     ja: "テストネット専用です。ここで発行されるトークンに価値はありません。流動性はコントラクトにより恒久的にロックされますが、ご自身での調査に代わるものではありません。",
@@ -51,6 +56,7 @@ const STRINGS = {
 
   // --- hero -----------------------------------------------------------
   "hero.badge.testnet": { en: "Arc Testnet", ja: "Arcテストネット" },
+  "hero.badge.mainnet": { en: "Live on Arc Mainnet", ja: "Arcメインネットで稼働中" },
   "hero.title.1": { en: "Launch at", ja: "時価総額" },
   "hero.title.2": { en: "Tradeable", ja: "どこでも" },
   "hero.title.3": { en: "everywhere", ja: "即座に取引" },
@@ -336,6 +342,7 @@ const STRINGS = {
   "cta.notDeployed": { en: "Contracts not deployed", ja: "コントラクト未デプロイ" },
   "cta.connect": { en: "Connect a wallet", ja: "ウォレットを接続" },
   "cta.switchNetwork": { en: "Switch to Arc Testnet", ja: "Arcテストネットに切替" },
+  "cta.switchNetwork.mainnet": { en: "Switch to Arc Mainnet", ja: "Arcメインネットに切替" },
   "cta.working": { en: "Working…", ja: "処理中…" },
 
   "status.hashing": { en: "Computing deployment hash…", ja: "デプロイハッシュを計算中…" },

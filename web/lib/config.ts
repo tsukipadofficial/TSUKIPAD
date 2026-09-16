@@ -1,4 +1,4 @@
-import { arcTestnet } from "viem/chains";
+import { arc, arcTestnet } from "viem/chains";
 import type { Address, Chain } from "viem";
 
 /// Arc's USDC ERC20 interface. Note the decimals trap documented by Arc: the
@@ -13,6 +13,14 @@ export const TOKEN_DECIMALS = 18;
 export const POOL_FEE = 10_000;
 export const TICK_SPACING = 200;
 
+/// Which Arc the whole app runs against. One switch, read at build time: chain,
+/// default RPCs, explorer, faucet link and the testnet copy all follow it.
+///
+/// Defaults to testnet so that a deployment without the variable -- a preview,
+/// a fresh clone -- can never quietly point real users at mainnet contracts.
+export const IS_MAINNET = process.env.NEXT_PUBLIC_NETWORK === "mainnet";
+const BASE_CHAIN = IS_MAINNET ? arc : arcTestnet;
+
 /// Docs list rpc.testnet.arc.io; viem ships rpc.testnet.arc.network. Both resolve
 /// to the same chain, and this is overridable for local anvil work.
 ///
@@ -21,7 +29,7 @@ export const TICK_SPACING = 200;
 /// bursts, and a rate-limited read used to surface as "not a launch from this
 /// pad" on a token that plainly existed.
 export const RPC_URL =
-  process.env.NEXT_PUBLIC_RPC_URL ?? "https://rpc.testnet.arc.io";
+  process.env.NEXT_PUBLIC_RPC_URL ?? (IS_MAINNET ? "https://rpc.mainnet.arc.io" : "https://rpc.testnet.arc.io");
 
 /// Server-side endpoints for log scanning, which is a different problem.
 ///
@@ -43,8 +51,12 @@ const PUBLIC_LOG_RPCS: Record<number, string[]> = {
 };
 export const INDEXER_RPC_URLS: string[] = Array.from(new Set([
   ...(process.env.INDEXER_RPC_URL ?? "").split(",").map((u) => u.trim()).filter(Boolean),
-  ...(PUBLIC_LOG_RPCS[arcTestnet.id] ?? []),
+  ...(PUBLIC_LOG_RPCS[BASE_CHAIN.id] ?? []),
 ]));
+
+export const EXPLORER_URL = IS_MAINNET ? "https://explorer.arc.io" : "https://testnet.arcscan.app";
+/// Only testnet USDC comes from a faucet. On mainnet there is nothing to link.
+export const FAUCET_URL: string | null = IS_MAINNET ? null : "https://faucet.circle.com";
 
 /// The chain, with its RPC pinned to RPC_URL.
 ///
@@ -52,12 +64,17 @@ export const INDEXER_RPC_URLS: string[] = Array.from(new Set([
 /// the embedded wallet it signs with -- would otherwise use whatever endpoint
 /// viem ships, while wagmi used ours. One endpoint everywhere means one set of
 /// limits and one thing to check when a transaction misbehaves.
-export const chain = {
-  ...arcTestnet,
+/// Typed as a plain Chain: its id depends on the build-time network, and a
+/// literal union of both ids would make every per-chain map demand both.
+export const chain: Chain = {
+  ...BASE_CHAIN,
   rpcUrls: {
     default: { http: [RPC_URL] },
   },
-} as const satisfies Chain;
+  blockExplorers: {
+    default: { name: IS_MAINNET ? "Arc Explorer" : "ArcScan", url: EXPLORER_URL },
+  },
+};
 
 /// Privy app id. Public by design -- it identifies the app to Privy's client
 /// SDK and already ships in the browser bundle, so there is nothing to hide by
@@ -81,8 +98,6 @@ export const WALLETCONNECT_PROJECT_ID =
 export const SITE_ORIGIN =
   typeof window !== "undefined" ? window.location.origin : "https://www.tsukipad.com";
 
-export const EXPLORER_URL = "https://testnet.arcscan.app";
-export const FAUCET_URL = "https://faucet.circle.com";
 
 function required(name: string, value: string | undefined): Address {
   if (!value || !value.startsWith("0x")) {

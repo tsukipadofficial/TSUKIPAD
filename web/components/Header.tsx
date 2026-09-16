@@ -157,12 +157,14 @@ export function Header() {
           </div>
 
           {signedIn && !wrongNetwork ? (
+            // On testnet the balance doubles as a faucet link; mainnet USDC
+            // does not come from a faucet, so there it is just a balance.
             <a
-              href={FAUCET_URL}
-              target="_blank"
-              rel="noreferrer"
+              href={FAUCET_URL ?? undefined}
+              target={FAUCET_URL ? "_blank" : undefined}
+              rel={FAUCET_URL ? "noreferrer" : undefined}
               className="hidden items-center gap-1.5 border-2 border-line px-3 py-1.5 text-sm transition-colors hover:border-cyan md:inline-flex"
-              title="Get testnet USDC from the Circle faucet"
+              title={FAUCET_URL ? "Get testnet USDC from the Circle faucet" : "Your USDC on Arc"}
             >
               <LiveDot />
               <span className="tabular font-bold">

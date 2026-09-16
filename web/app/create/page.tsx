@@ -33,6 +33,7 @@ import {
   DEFAULT_START_MCAP_USD,
   DEFAULT_CEILING_MULTIPLE,
   MAX_CREATOR_TAX_BPS,
+  IS_MAINNET,
   isDeployed,
   isCurveDeployed,
   chain,
@@ -971,7 +972,7 @@ export default function CreatePage() {
               : !isConnected
                 ? t("cta.connect")
                 : wrongChain
-                  ? t("cta.switchNetwork")
+                  ? t(IS_MAINNET ? "cta.switchNetwork.mainnet" : "cta.switchNetwork")
                   : mining || receipt.isLoading
                     ? t("cta.working")
                     : t("cta.launch")}
