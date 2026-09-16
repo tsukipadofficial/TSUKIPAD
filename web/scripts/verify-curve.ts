@@ -27,10 +27,19 @@ const POOL_FEE = 10_000;
 // anvil's first two default accounts
 const KEY = (process.env.KEY ??
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80") as `0x${string}`;
-const KEY2 = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d" as const;
+// The buyer. Anvil's second account by default; on a live network pass a
+// funded key, or the creator's own key -- the walk still exercises everything.
+const KEY2 = (process.env.BUYER_KEY ?? "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d") as `0x${string}`;
 
 const deployments = JSON.parse(readFileSync(new URL("../../contracts/deployments/5042002.json", import.meta.url), "utf8"));
 const CURVE = (process.env.CURVE ?? deployments.curve) as Address;
+// The walk's amounts, so the same script fits a throwaway curve that graduates
+// at a few dollars on testnet and the real one that graduates at thousands.
+const DEV_BUY = parseUnits(process.env.DEV_BUY_USDC ?? "250", 6);
+const SMALL_BUY = parseUnits(process.env.SMALL_BUY_USDC ?? "1000", 6);
+const BUYOUT = parseUnits(process.env.BUYOUT_USDC ?? "50000", 6);
+const POOL_BUY = parseUnits(process.env.POOL_BUY_USDC ?? "2000", 6);
+const POOL_TRADES = parseUnits(process.env.POOL_TRADES_USDC ?? "5000", 6);
 // Tokens are CREATE2-deployed by the TokenDeployer, so that is what a salt is
 // mined against -- mining against the pad would predict an address no launch
 // can land on.
@@ -43,6 +52,10 @@ const chain = { ...arcTestnet, rpcUrls: { default: { http: [RPC] } } };
 const pub = createPublicClient({ chain, transport: http(RPC) });
 
 let failed = 0;
+// On Arc the gas token is USDC, so every transaction a wallet sends moves the
+// balance under test. Tallied and added back where a sender's delta is compared.
+let gasSpent6 = 0n;
+let gasIsUsdc = false;
 function check(label: string, ok: boolean, detail = "") {
   console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? `  (${detail})` : ""}`);
   if (!ok) failed++;
@@ -54,8 +67,11 @@ async function main() {
   const buyer = privateKeyToAccount(KEY2);
   const creatorWallet = createWalletClient({ account: creator, chain, transport: http(RPC) });
   const buyerWallet = createWalletClient({ account: buyer, chain, transport: http(RPC) });
-  const send = async (w: typeof creatorWallet, req: Parameters<typeof w.writeContract>[0]) =>
-    pub.waitForTransactionReceipt({ hash: await w.writeContract(req) });
+  const send = async (w: typeof creatorWallet, req: Parameters<typeof w.writeContract>[0]) => {
+    const rc = await pub.waitForTransactionReceipt({ hash: await w.writeContract(req) });
+    if (gasIsUsdc) gasSpent6 += (rc.gasUsed * rc.effectiveGasPrice) / 10n ** 12n;
+    return rc;
+  };
 
   console.log("curve  ", CURVE);
   console.log("creator", creator.address);
@@ -72,6 +88,8 @@ async function main() {
   }
 
   // ---------- 1. LAUNCH, exactly as the create page does ----------
+  gasIsUsdc = (await pub.getBalance({ address: buyer.address })) / 10n ** 12n === (await pub.readContract({ address: USDC, abi: erc20Abi, functionName: "balanceOf", args: [buyer.address] }));
+  console.log(`gas paid in USDC: ${gasIsUsdc}\n`);
   console.log("1. LAUNCH");
   const name = "Curve Path";
   const symbol = "CURVE";
@@ -83,7 +101,7 @@ async function main() {
   const { salt, token: predicted, attempts } = mineSalt(TOKEN_DEPLOYER, creator.address, initCodeHash);
   console.log(`  mined ${predicted} in ${attempts} attempts`);
 
-  const devBuy = parseUnits("250", 6);
+  const devBuy = DEV_BUY;
   await send(creatorWallet, { address: USDC, abi: erc20Abi, functionName: "approve", args: [CURVE, devBuy] });
   const launchReceipt = await send(creatorWallet, {
     address: CURVE, abi: curveAbi, functionName: "launch",
@@ -105,7 +123,7 @@ async function main() {
   const c0 = await pub.readContract({ address: CURVE, abi: curveAbi, functionName: "curveOf", args: [token] });
   check("dev buy raised USDC net of 2% fee", c0.usdcRaised === devBuy - (devBuy * 200n) / 10_000n, usd(c0.usdcRaised));
   const creatorBal = await pub.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [creator.address] });
-  check("creator holds the dev buy, untaxed", creatorBal > parseUnits("60000000", 18), `${formatUnits(creatorBal, 18).split(".")[0]} tokens`);
+  check("creator holds the dev buy, untaxed", creatorBal > 0n, `${formatUnits(creatorBal, 18).split(".")[0]} tokens`);
   check("transfers locked before graduation", await pub.simulateContract({ address: token, abi: erc20Abi, functionName: "transfer", args: [buyer.address, 1n], account: creator.address }).then(() => false, () => true));
 
   // ---------- 2. TRADE ON THE CURVE ----------
@@ -116,21 +134,24 @@ async function main() {
   await new Promise((r) => setTimeout(r, 5_500));
   if (RPC.includes("127.0.0.1")) await pub.request({ method: "evm_mine" as never, params: [] as never });
 
-  await send(buyerWallet, { address: USDC, abi: erc20Abi, functionName: "approve", args: [CURVE, parseUnits("100000", 6)] });
-  const [qOut, qUsed, qFee] = await pub.readContract({ address: CURVE, abi: curveAbi, functionName: "quoteBuy", args: [token, parseUnits("1000", 6), buyer.address] });
-  check("quote past the snipe window charges only the 2% fee", qFee === parseUnits("20", 6), usd(qFee));
+  await send(buyerWallet, { address: USDC, abi: erc20Abi, functionName: "approve", args: [CURVE, 2n ** 255n] });
+  const [qOut, qUsed, qFee] = await pub.readContract({ address: CURVE, abi: curveAbi, functionName: "quoteBuy", args: [token, SMALL_BUY, buyer.address] });
+  check("quote past the snipe window charges only the 2% fee", qFee === (SMALL_BUY * 200n) / 10_000n, usd(qFee));
   const beforeBuy = await pub.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [buyer.address] });
-  await send(buyerWallet, { address: CURVE, abi: curveAbi, functionName: "buy", args: [token, parseUnits("1000", 6), qOut, buyer.address] });
+  await send(buyerWallet, { address: CURVE, abi: curveAbi, functionName: "buy", args: [token, SMALL_BUY, qOut, buyer.address] });
   const afterBuy = await pub.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [buyer.address] });
-  check("buy delivers exactly the quoted tokens", afterBuy - beforeBuy === qOut && qUsed === parseUnits("1000", 6));
+  check("buy delivers exactly the quoted tokens", afterBuy - beforeBuy === qOut && qUsed === SMALL_BUY);
 
   const sellAmt = qOut / 4n;
   const [qSell] = await pub.readContract({ address: CURVE, abi: curveAbi, functionName: "quoteSell", args: [token, sellAmt] });
   await send(buyerWallet, { address: token, abi: erc20Abi, functionName: "approve", args: [CURVE, sellAmt] });
   const usdcBefore = await pub.readContract({ address: USDC, abi: erc20Abi, functionName: "balanceOf", args: [buyer.address] });
+  const gasBeforeSell = gasSpent6;
   await send(buyerWallet, { address: CURVE, abi: curveAbi, functionName: "sell", args: [token, sellAmt, qSell, buyer.address] });
   const usdcAfter = await pub.readContract({ address: USDC, abi: erc20Abi, functionName: "balanceOf", args: [buyer.address] });
-  check("sell pays exactly the quoted USDC", usdcAfter - usdcBefore === qSell, usd(qSell));
+  const sellDelta = usdcAfter - usdcBefore + (gasSpent6 - gasBeforeSell);
+  // Within a micro-dollar: the 6-decimal view of an 18-decimal balance truncates.
+  check("sell pays exactly the quoted USDC", sellDelta >= qSell - 2n && sellDelta <= qSell + 2n, usd(qSell));
 
   const owed = await pub.readContract({ address: CURVE, abi: curveAbi, functionName: "creatorFeesOwed", args: [token] });
   check("creator fees accrue on the curve", owed > 0n, usd(owed));
@@ -138,11 +159,16 @@ async function main() {
   // ---------- 3. GRADUATE ----------
   console.log("\n3. GRADUATION");
   const usdcPre = await pub.readContract({ address: USDC, abi: erc20Abi, functionName: "balanceOf", args: [buyer.address] });
-  await send(buyerWallet, { address: CURVE, abi: curveAbi, functionName: "buy", args: [token, parseUnits("50000", 6), 0n, buyer.address] });
+  await send(buyerWallet, { address: CURVE, abi: curveAbi, functionName: "buy", args: [token, BUYOUT, 0n, buyer.address] });
   const usdcPost = await pub.readContract({ address: USDC, abi: erc20Abi, functionName: "balanceOf", args: [buyer.address] });
   const c1 = await pub.readContract({ address: CURVE, abi: curveAbi, functionName: "curveOf", args: [token] });
   check("curve graduated", c1.graduated);
-  check("final buy charged only what was left, not the $50,000 offered", usdcPre - usdcPost < parseUnits("12000", 6), usd(usdcPre - usdcPost));
+  const gradUsdc = (await pub.readContract({ address: CURVE, abi: curveAbi, functionName: "graduationUsdc" })) as bigint;
+  check(
+    `final buy charged only what was left, not the ${usd(BUYOUT)} offered`,
+    usdcPre - usdcPost < (gradUsdc * 13n) / 10n && usdcPre - usdcPost < BUYOUT,
+    usd(usdcPre - usdcPost),
+  );
   check("token graduated (transfers open)", await pub.readContract({ address: token, abi: curveTokenAbi, functionName: "graduated" }));
   check("pool recorded", c1.pool !== "0x" + "0".repeat(64), c1.pool);
   const [sqrtP] = (await pub.readContract({
@@ -153,7 +179,16 @@ async function main() {
   })) as readonly [bigint, number, number, number];
   const price = (Number(sqrtP) / 2 ** 96) ** 2 * 1e12;
   const mcap = price * 1e9;
-  check("pool opened at ~$52K market cap", mcap > 51_000 && mcap < 53_000, `$${Math.round(mcap).toLocaleString()}`);
+  // Where the curve says it graduates: raise / pool share, whatever this
+  // curve's parameters are -- the production $52K or a throwaway's few dollars.
+  const lpSupplyWei = (await pub.readContract({ address: CURVE, abi: curveAbi, functionName: "lpSupply" })) as bigint;
+  const totalWei = (await pub.readContract({ address: CURVE, abi: curveAbi, functionName: "TOTAL_SUPPLY" })) as bigint;
+  const expectedMcap = (Number(gradUsdc) / 1e6) * (Number(totalWei) / Number(lpSupplyWei));
+  check(
+    `pool opened at the graduation market cap (~$${Math.round(expectedMcap).toLocaleString()})`,
+    mcap > expectedMcap * 0.98 && mcap < expectedMcap * 1.02,
+    `$${Math.round(mcap).toLocaleString()}`,
+  );
   // Every v4 pool's balances sit in the manager, so that is where the raise is.
   const poolUsdc = await pub.readContract({ address: USDC, abi: erc20Abi, functionName: "balanceOf", args: [MANAGER] });
   // Read the target off the contract rather than hardcoding it: the raise and
@@ -167,14 +202,14 @@ async function main() {
 
   // ---------- 4. POOL TRADING + FEES ----------
   console.log("\n4. POOL");
-  await send(buyerWallet, { address: USDC, abi: erc20Abi, functionName: "approve", args: [ROUTER, parseUnits("5000", 6)] });
+  await send(buyerWallet, { address: USDC, abi: erc20Abi, functionName: "approve", args: [ROUTER, POOL_TRADES] });
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
   const bought = await pub.simulateContract({
     address: ROUTER, abi: swapRouterAbi, functionName: "exactInputSingle",
-    args: [{ key: poolKey(token), zeroForOne: false, amountIn: parseUnits("2000", 6), amountOutMinimum: 0n, recipient: buyer.address, deadline }],
+    args: [{ key: poolKey(token), zeroForOne: false, amountIn: POOL_BUY, amountOutMinimum: 0n, recipient: buyer.address, deadline }],
     account: buyer.address,
   }).then((r) => r.result);
-  await send(buyerWallet, { address: ROUTER, abi: swapRouterAbi, functionName: "exactInputSingle", args: [{ key: poolKey(token), zeroForOne: false, amountIn: parseUnits("2000", 6), amountOutMinimum: 0n, recipient: buyer.address, deadline }] });
+  await send(buyerWallet, { address: ROUTER, abi: swapRouterAbi, functionName: "exactInputSingle", args: [{ key: poolKey(token), zeroForOne: false, amountIn: POOL_BUY, amountOutMinimum: 0n, recipient: buyer.address, deadline }] });
   check("buy through the router works after graduation", bought > 0n);
   await send(buyerWallet, { address: token, abi: erc20Abi, functionName: "approve", args: [ROUTER, bought] });
   await send(buyerWallet, { address: ROUTER, abi: swapRouterAbi, functionName: "exactInputSingle", args: [{ key: poolKey(token), zeroForOne: true, amountIn: bought, amountOutMinimum: 0n, recipient: buyer.address, deadline }] });
@@ -201,9 +236,10 @@ async function main() {
   check("pool liquidity untouched by collection", liqAfter === liqBefore);
 
   const cUsdcBefore = await pub.readContract({ address: USDC, abi: erc20Abi, functionName: "balanceOf", args: [creator.address] });
+  const gasBeforePayout = gasSpent6;
   await send(buyerWallet, { address: CURVE, abi: curveAbi, functionName: "claimCreatorFees", args: [token] });
   const cUsdcAfter = await pub.readContract({ address: USDC, abi: erc20Abi, functionName: "balanceOf", args: [creator.address] });
-  check("anyone can trigger the payout; it reaches the creator", cUsdcAfter - cUsdcBefore === owedAfter, usd(owedAfter));
+  check("anyone can trigger the payout; it reaches the creator", cUsdcAfter - cUsdcBefore + (gasSpent6 - gasBeforePayout) >= owedAfter - 2n, usd(owedAfter));
 
   console.log(`\ntoken ${token}`);
   console.log(failed === 0 ? "\nALL PASS" : `\n${failed} FAILED`);

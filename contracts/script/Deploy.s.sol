@@ -150,6 +150,16 @@ contract Deploy is Script {
         );
         require(address(launchpad) == predictedLaunchpad, "launchpad address drifted from the hook's");
 
+        // The raise can be shrunk on testnet only, to walk a launch through a
+        // real graduation with the few dollars of testnet USDC a faucet gives.
+        // Off testnet the production figures are the only figures.
+        uint256 graduationUsdc = CURVE_GRADUATION_USDC;
+        uint16 lpBps = CURVE_LP_BPS;
+        if (block.chainid == ARC_TESTNET_CHAIN_ID) {
+            graduationUsdc = vm.envOr("CURVE_GRADUATION_USDC", CURVE_GRADUATION_USDC);
+            lpBps = uint16(vm.envOr("CURVE_LP_BPS", uint256(CURVE_LP_BPS)));
+            if (graduationUsdc != CURVE_GRADUATION_USDC) console2.log("TEST STACK: graduation USDC", graduationUsdc);
+        }
         TsukiCurve curve = new TsukiCurve(
             USDC,
             manager,
@@ -161,8 +171,8 @@ contract Deploy is Script {
             PROTOCOL_FEE_BPS,
             CURVE_TRADE_FEE_BPS,
             LAUNCH_FEE,
-            CURVE_GRADUATION_USDC,
-            CURVE_LP_BPS
+            graduationUsdc,
+            lpBps
         );
         require(address(curve) == predictedCurve, "curve address drifted from the hook's");
 
