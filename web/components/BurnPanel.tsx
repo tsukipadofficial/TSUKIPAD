@@ -1,12 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { formatUnits } from "viem";
-import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 
 import { Badge, Button, Card } from "./ui";
-import { launchpadAbi } from "@/lib/abi";
-import { LAUNCHPAD_ADDRESS, TOKEN_DECIMALS, USDC_DECIMALS, chain } from "@/lib/config";
+import { hookAbi, launchpadAbi, stateViewAbi } from "@/lib/abi";
+import { pendingFees } from "@/lib/fees";
+import { poolIdFor, poolKeyFor } from "@/lib/v4";
+import {
+  HOOK_ADDRESS,
+  LAUNCHPAD_ADDRESS,
+  STATE_VIEW_ADDRESS,
+  TOKEN_DECIMALS,
+  USDC_DECIMALS,
+  chain,
+} from "@/lib/config";
 import { compactNumber, formatUsd, formatUnitsFloat } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import type { LaunchView } from "@/lib/hooks";
@@ -23,6 +32,69 @@ export function BurnPanel({ launch }: { launch: LaunchView }) {
   const { writeContractAsync } = useWriteContract();
   const [busy, setBusy] = useState(false);
 
+  // What pressing the button would actually burn right now. Without this the
+  // control looks identical whether there is $5 of fees waiting or nothing at
+  // all, so a press that correctly does nothing reads as the feature being
+  // broken.
+  const poolId = useMemo(() => poolIdFor(launch.token), [launch.token]);
+  const key = useMemo(() => poolKeyFor(launch.token), [launch.token]);
+  const ZERO_SALT = "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
+
+  const { data: feeData } = useReadContracts({
+    contracts: [
+      {
+        address: STATE_VIEW_ADDRESS,
+        abi: stateViewAbi,
+        functionName: "getPositionInfo",
+        args: [poolId, LAUNCHPAD_ADDRESS, launch.tickLower, launch.tickUpper, ZERO_SALT],
+      },
+      {
+        address: STATE_VIEW_ADDRESS,
+        abi: stateViewAbi,
+        functionName: "getFeeGrowthInside",
+        args: [poolId, launch.tickLower, launch.tickUpper],
+      },
+      // The creator tax the hook is holding is swept by the same call, so it is
+      // part of what a press would burn.
+      { address: HOOK_ADDRESS, abi: hookAbi, functionName: "owed", args: [poolId, key.currency0] },
+      { address: HOOK_ADDRESS, abi: hookAbi, functionName: "owed", args: [poolId, key.currency1] },
+      { address: LAUNCHPAD_ADDRESS, abi: launchpadAbi, functionName: "protocolFeeBps" },
+    ] as const,
+    query: { refetchInterval: 15_000 },
+  });
+
+  const ready = useMemo(() => {
+    if (!feeData || feeData.some((d) => d.status !== "success")) return null;
+    const pos = feeData[0].result as readonly [bigint, bigint, bigint];
+    const inside = feeData[1].result as readonly [bigint, bigint];
+    const owed = pendingFees({
+      liquidity: pos[0],
+      feeGrowthInside0LastX128: pos[1],
+      feeGrowthInside1LastX128: pos[2],
+      feeGrowthInside0X128: inside[0],
+      feeGrowthInside1X128: inside[1],
+    });
+    const tax0 = feeData[2].result as bigint;
+    const tax1 = feeData[3].result as bigint;
+    const protocolBps = BigInt(Number(feeData[4].result));
+
+    // The token side is burned outright and the USDC side buys more to burn, so
+    // both count. Priced in USDC at spot to give one comparable number.
+    const supply = Number(launch.supplyWhole);
+    const priceUsd = supply > 0 ? launch.marketCapUsd / supply : 0;
+    const tokenSide = owed.token + tax0;
+    const tokenAsUsdc =
+      priceUsd > 0 ? BigInt(Math.floor((Number(tokenSide) / 1e18) * priceUsd * 1e6)) : 0n;
+    const total = owed.usdc + tax1 + tokenAsUsdc;
+    // The treasury's cut is not burned; only the creator's share is.
+    return total - (total * protocolBps) / 10_000n;
+  }, [feeData, launch.supplyWhole, launch.marketCapUsd]);
+
+  const nothingToBurn = ready !== null && ready === 0n;
+
+  // Below every hook on purpose: an early return above them would change how
+  // many hooks run between a burn launch and an ordinary one, and React reuses
+  // this component across tokens.
   if (!launch.buybackAndBurn) return null;
 
   const burned = formatUnitsFloat(launch.tokensBurned, TOKEN_DECIMALS);
@@ -80,6 +152,14 @@ export function BurnPanel({ launch }: { launch: LaunchView }) {
         </p>
       ) : null}
 
+      {ready !== null ? (
+        <p className="tabular mt-3 border-t-2 border-line pt-3 text-xs text-muted">
+          {nothingToBurn
+            ? t("burn.nothingWaiting")
+            : t("burn.waiting", { amt: formatUsd(formatUnitsFloat(ready, USDC_DECIMALS)) })}
+        </p>
+      ) : null}
+
       {/* A real button, not a footnote. The burn only happens when somebody
           calls it, so the one control that makes this panel's numbers move has
           to look like the thing to press. */}
@@ -87,9 +167,9 @@ export function BurnPanel({ launch }: { launch: LaunchView }) {
         className="mt-4 w-full"
         variant="pink"
         onClick={handleSweep}
-        disabled={busy || !isConnected || chainId !== chain.id}
+        disabled={busy || !isConnected || chainId !== chain.id || nothingToBurn}
       >
-        {busy ? t("burn.burning") : t("burn.sweep")}
+        {busy ? t("burn.burning") : nothingToBurn ? t("burn.nothingYet") : t("burn.sweep")}
       </Button>
       <p className="mt-2 text-center text-[0.6875rem] leading-relaxed text-faint">
         {t("burn.sweepHint")}

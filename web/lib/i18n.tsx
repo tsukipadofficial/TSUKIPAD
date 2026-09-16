@@ -161,6 +161,12 @@ const STRINGS = {
   },
   "burn.spent": { en: "Spent buying back", ja: "買い戻し総額" },
   "burn.burned": { en: "Supply destroyed", ja: "焼却済供給量" },
+  "burn.waiting": { en: "{amt} of fees is waiting to be burned.", ja: "焼却待ちの手数料は{amt}です。" },
+  "burn.nothingWaiting": {
+    en: "No fees waiting. Fees build up as people trade — come back after some trading and press the button.",
+    ja: "待機中の手数料はありません。取引が行われると手数料が貯まります。",
+  },
+  "burn.nothingYet": { en: "Nothing to burn yet", ja: "まだ焼却するものがありません" },
   "burn.sweep": { en: "Buy back & burn now", ja: "今すぐ買い戻して焼却" },
   "burn.burning": { en: "Burning…", ja: "焼却中…" },
   "burn.sweepHint": {
