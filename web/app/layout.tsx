@@ -5,6 +5,7 @@ import { Providers } from "./providers";
 import { Header } from "@/components/Header";
 import { SiteFooter } from "@/components/SiteFooter";
 import { NAME, SITE_URL, TAGLINE, DESCRIPTION, SOCIAL_DESCRIPTION } from "@/lib/brand";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 /// Fonts are self-hosted rather than pulled via `next/font/google`.
 ///
@@ -48,9 +49,14 @@ export const metadata: Metadata = {
   },
 };
 
-/// themeColor belongs on the viewport export in this Next version.
+/// themeColor belongs on the viewport export in this Next version. Two entries
+/// so the browser chrome matches the ground the head script picks for a first
+/// visit; a later toggle is a live DOM change this static value cannot follow.
 export const viewport: Viewport = {
-  themeColor: "#08080a",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f2f1ea" },
+    { media: "(prefers-color-scheme: dark)", color: "#08080a" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -58,8 +64,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      /* the head script stamps data-theme before React hydrates */
+      suppressHydrationWarning
     >
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         {/*
           Japanese is loaded at runtime rather than bundled. Noto Sans JP is
           several megabytes across its subsets, and only a fraction of visitors

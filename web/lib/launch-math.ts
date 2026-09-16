@@ -214,8 +214,11 @@ export const VANITY_SUFFIX = "272";
 /// 55.7k (~2.9s). The cap is set far above that because the cost of one more
 /// wasted millisecond is nothing next to a launch that refuses to proceed --
 /// at 20,000 it would have failed about half the time.
+/// `deployer` is whichever contract runs the CREATE2 -- the pads hand that job
+/// to TokenDeployer, so passing a pad here would mine a salt for an address no
+/// launch will ever land on.
 export function mineSalt(
-  launchpad: Address,
+  deployer: Address,
   creator: Address,
   initCodeHash: Hex,
   maxAttempts = 1_000_000,
@@ -224,7 +227,7 @@ export function mineSalt(
   const suffix = VANITY_SUFFIX.toLowerCase();
   for (let i = 0; i < maxAttempts; i++) {
     const salt = `0x${i.toString(16).padStart(64, "0")}` as Hex;
-    const token = predictTokenAddress(launchpad, creator, salt, initCodeHash);
+    const token = predictTokenAddress(deployer, creator, salt, initCodeHash);
     if (BigInt(token) >= usdc) continue;
     if (suffix && !token.toLowerCase().endsWith(suffix)) continue;
     return { salt, token, attempts: i + 1 };

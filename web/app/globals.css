@@ -22,9 +22,22 @@
   --color-cyan: #29e5f5;
   --color-amber: #ffb020;
 
+  /* Hover face of a filled button. Lifts away from the ground: brighter on
+     black, deeper on paper. */
+  --color-lime-hi: #d8ff5e;
+  --color-pink-hi: #ff629f;
+
+  /* Third place. Only the leaderboard wants it. */
+  --color-bronze: #c88b4a;
+
   --color-ink: #f4f4f0;
   --color-muted: #8c8c99;
   --color-faint: #5b5b68;
+
+  /* Hard ink: the 2px stamp under a button or a bright tile, and the label
+     printed on one. Tracks `void` on the dark ground but not on paper, where
+     the page turns white and a shadow still has to read as a shadow. */
+  --color-stamp: #08080a;
 
   --font-display: var(--font-space-grotesk), 'Noto Sans JP', ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), 'Noto Sans JP', ui-monospace, monospace;
@@ -49,21 +62,67 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ---------------------------------------------------------------------------
+   Light palette
+
+   Same tokens, paper ground — set by an inline script in the document head
+   before first paint, so nothing flashes. Dark stays the default and the
+   values above are untouched.
+
+   The accents are darkened rather than duplicated. Acid lime is 1.4:1 against
+   white, so every one of the ~50 `text-lime` sites would be unreadable; a
+   deepened lime passes AA as text, as a rule, and as a fill — and `text-void`,
+   which is what sits on top of a fill, becomes paper here and still reads.
+   What cannot follow that rule is `stamp`: a shadow has to stay ink.
+--------------------------------------------------------------------------- */
+[data-theme="light"] {
+  --color-void: #f2f1ea;
+  --color-surface: #ffffff;
+  --color-surface-2: #e7e5da;
+  /* Dark enough to carry the offset shadow — a grey rule would erase the card. */
+  --color-line: #3a3a44;
+  --color-line-bright: #0b0b10;
+
+  --color-lime: #557700;
+  --color-lime-dim: #3d5600;
+  --color-pink: #c20f6b;
+  --color-cyan: #00707f;
+  --color-amber: #8a5400;
+
+  --color-lime-hi: #445f00;
+  --color-pink-hi: #a30b58;
+
+  --color-bronze: #8a5a28;
+
+  --color-ink: #101015;
+  --color-muted: #55555f;
+  --color-faint: #6a6a73;
+
+  --color-stamp: #16161c;
+}
+
 html {
   color-scheme: dark;
   scrollbar-color: var(--color-line-bright) var(--color-void);
+  /* Grain flecks: white lifts the flat black, ink does the same job on paper. */
+  --grain: rgba(255, 255, 255, 0.012);
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --grain: rgba(0, 0, 0, 0.022);
 }
 
 body {
   background-color: var(--color-void);
   color: var(--color-ink);
   font-family: var(--font-display);
-  /* Faint diagonal grain so the flat black reads as a surface, not a void. */
+  /* Faint diagonal grain so the flat ground reads as a surface, not a void. */
   background-image:
     repeating-linear-gradient(
       45deg,
-      rgba(255, 255, 255, 0.012) 0px,
-      rgba(255, 255, 255, 0.012) 1px,
+      var(--grain) 0px,
+      var(--grain) 1px,
       transparent 1px,
       transparent 3px
     );
@@ -96,17 +155,17 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border: 2px solid var(--color-void);
+  border: 2px solid var(--color-stamp);
   font-weight: 700;
   letter-spacing: -0.01em;
   text-transform: uppercase;
   cursor: pointer;
   transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.15s ease;
-  box-shadow: 4px 4px 0 0 var(--color-void);
+  box-shadow: 4px 4px 0 0 var(--color-stamp);
 
   &:active:not(:disabled) {
     transform: translate(4px, 4px);
-    box-shadow: 0 0 0 0 var(--color-void);
+    box-shadow: 0 0 0 0 var(--color-stamp);
   }
 
   &:disabled {

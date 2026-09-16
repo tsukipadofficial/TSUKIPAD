@@ -13,6 +13,7 @@ import { arcTestnet } from "viem/chains";
 import { readFileSync } from "node:fs";
 
 import { launchpadAbi, swapRouterAbi, erc20Abi } from "../lib/abi";
+import { poolKeyFor as poolKey } from "../lib/v4";
 import { mineSalt, startTickForMarketCap, ceilingTick } from "../lib/launch-math";
 import { encodeMetadata } from "../lib/metadata";
 import { commitmentFor } from "../lib/commitment";
@@ -75,11 +76,13 @@ async function main() {
     address: LAUNCHPAD, abi: launchpadAbi, functionName: "launch",
     args: [{
       name: NAME, symbol: SYMBOL, metadataURI, totalSupply: totalSupplyWei, salt,
-      tickLower, tickUpper, creatorAllocationBps: 0, rewardHolders: false,
+      tickLower, tickUpper, creatorAllocationBps: 0,
+      rewardHolders: false,
       feeRecipient: "0x0000000000000000000000000000000000000000",
       buybackAndBurn: false,
       recipientCommitment: commitment,
       referrer: "0x0000000000000000000000000000000000000000",
+      creatorTaxBps: 0,
     }],
   });
   await pub.waitForTransactionReceipt({ hash });
@@ -103,9 +106,13 @@ async function main() {
   const buyHash = await wallet.writeContract({
     address: ROUTER, abi: swapRouterAbi, functionName: "exactInputSingle",
     args: [{
-      tokenIn: USDC, tokenOut: token, fee: 10_000, recipient: account.address,
-      deadline: BigInt(Math.floor(Date.now() / 1000) + 600), amountIn: spend, amountOutMinimum: 0n,
-    }],
+        key: poolKey(token),
+        zeroForOne: false,
+        amountIn: spend,
+        amountOutMinimum: 0n,
+        recipient: account.address,
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
+      }],
   });
   await pub.waitForTransactionReceipt({ hash: buyHash });
   const bought = (await pub.readContract({
@@ -124,8 +131,12 @@ async function main() {
     hash: await wallet.writeContract({
       address: ROUTER, abi: swapRouterAbi, functionName: "exactInputSingle",
       args: [{
-        tokenIn: token, tokenOut: USDC, fee: 10_000, recipient: account.address,
-        deadline: BigInt(Math.floor(Date.now() / 1000) + 600), amountIn: bought, amountOutMinimum: 0n,
+        key: poolKey(token),
+        zeroForOne: true,
+        amountIn: bought,
+        amountOutMinimum: 0n,
+        recipient: account.address,
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
       }],
     }),
   });

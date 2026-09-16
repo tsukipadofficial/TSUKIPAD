@@ -69,7 +69,7 @@ export function ImagePicker({
           <img
             src={value}
             alt=""
-            className="size-16 shrink-0 border-2 border-void object-cover"
+            className="size-16 shrink-0 border-2 border-stamp object-cover"
           />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-lime">{t("image.stored")}</p>

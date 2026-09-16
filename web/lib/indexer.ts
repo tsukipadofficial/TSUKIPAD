@@ -6,19 +6,31 @@
 /// every run is bounded, every pool keeps its own cursor, and a run that is cut
 /// short resumes exactly where it stopped rather than starting again.
 ///
-/// Attribution comes from the Swap event's `recipient`, which the router sets to
-/// the trader rather than to itself -- so a swap made through any interface is
-/// still credited to whoever actually received the tokens.
+/// Attribution comes from the pad's own router. Uniswap v4 keeps every pool in
+/// one manager and its Swap event names the contract that called it, not the
+/// person who asked -- indexing the manager alone would credit every trade on
+/// the site to the router. The router therefore emits the trader itself, which
+/// is what this reads. A trade routed around the site (through Uniswap's own
+/// router, say) still moves the price and still shows in the pool; it just does
+/// not land in anybody's position here.
 
 import { createPublicClient, http, parseAbiItem, type Address } from "viem";
 
-import { launchpadAbi } from "./abi";
-import { LAUNCHPAD_ADDRESS, INDEXER_RPC_URL, chain } from "./config";
+import { curveAbi, launchpadAbi } from "./abi";
+import { CURVE_ADDRESS, LAUNCHPAD_ADDRESS, SWAP_ROUTER_ADDRESS, INDEXER_RPC_URL, chain, isCurveDeployed } from "./config";
+import { poolIdFor } from "./v4";
 import { cmd, pipeline } from "./redis";
 import { EMPTY, applyBuy, applySell, type Position } from "./pnl";
 
 export const SWAP_EVENT = parseAbiItem(
-  "event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)",
+  "event Swapped(bytes32 indexed id, address indexed trader, address indexed recipient, bool zeroForOne, uint256 amountIn, uint256 amountOut)",
+);
+
+/// A buy or sell on the bonding curve, before a launch graduates. Attributed to
+/// `trader`, the wallet that paid; `recipient` on a curve trade is where the
+/// tokens went, which is the same wallet for every trade made from the site.
+export const CURVE_TRADE_EVENT = parseAbiItem(
+  "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 usdcAmount, uint256 tokenAmount, uint256 fee, uint256 tokensSold, uint256 usdcRaised)",
 );
 
 /// The RPC accepts 20,000; the hook that reads trades in the browser found 50,000
@@ -45,9 +57,45 @@ const client = () => createPublicClient({ chain, transport: http(INDEXER_RPC_URL
 /// Addresses that trade but are not traders. The launchpad sells collected token
 /// fees for USDC on every collection, which is a real swap with a real profit,
 /// and counting it would put the protocol at the top of its own leaderboard.
-const NOT_A_TRADER = new Set<string>([LAUNCHPAD_ADDRESS.toLowerCase()]);
+const NOT_A_TRADER = new Set<string>([LAUNCHPAD_ADDRESS.toLowerCase(), CURVE_ADDRESS.toLowerCase()]);
 
-export type PoolRef = { pool: string; token: string; createdAt: number };
+/// A source of trades for one token. Either a Uniswap pool, or -- for a curve
+/// launch -- the curve contract itself, whose trades are filtered by token. A
+/// graduated curve launch has both: its curve history and then its pool.
+export type PoolRef = { pool: string; token: string; createdAt: number; curve?: boolean };
+
+/// Cursor key for a curve launch's trades. The curve is one contract shared by
+/// every launch, so the cursor has to be per token rather than per address.
+const curveKey = (token: string) => `curve:${token.toLowerCase()}`;
+
+/// One trade, whichever contract it came from.
+type TradeRow = { who: string; buy: boolean; usdc: bigint; tokens: bigint };
+
+function fromSwap(log: { args: unknown }): TradeRow | null {
+  const a = log.args as {
+    trader?: Address;
+    zeroForOne?: boolean;
+    amountIn?: bigint;
+    amountOut?: bigint;
+  };
+  if (!a.trader || a.zeroForOne === undefined || a.amountIn === undefined || a.amountOut === undefined) {
+    return null;
+  }
+  // currency0 is the launch token, currency1 is USDC, so zeroForOne is a sell.
+  const buy = !a.zeroForOne;
+  return {
+    who: a.trader.toLowerCase(),
+    buy,
+    usdc: buy ? a.amountIn : a.amountOut,
+    tokens: buy ? a.amountOut : a.amountIn,
+  };
+}
+
+function fromCurveTrade(log: { args: unknown }): TradeRow | null {
+  const a = log.args as { trader?: Address; isBuy?: boolean; usdcAmount?: bigint; tokenAmount?: bigint };
+  if (!a.trader || a.isBuy === undefined || a.usdcAmount === undefined || a.tokenAmount === undefined) return null;
+  return { who: a.trader.toLowerCase(), buy: a.isBuy, usdc: a.usdcAmount, tokens: a.tokenAmount };
+}
 
 /// Arc produces a block roughly every 0.51 seconds. Used only to estimate where
 /// a pool began, never to decide what has been indexed -- cursors do that.
@@ -72,13 +120,42 @@ export async function syncPools(): Promise<PoolRef[]> {
     abi: launchpadAbi,
     functionName: "recentLaunches",
     args: [0n, 200n],
-  })) as readonly { token: Address; pool: Address; createdAt: bigint }[];
+  })) as readonly { token: Address; createdAt: bigint }[];
 
-  const entries = raw.map((l) => ({
-    pool: l.pool,
+  // A v4 "pool" is an id, not an address, and it is derivable from the token --
+  // so the cursor key is the id and nothing has to be read back from the chain.
+  const entries: PoolRef[] = raw.map((l) => ({
+    pool: poolIdFor(l.token),
     token: l.token,
     createdAt: Number(l.createdAt),
   }));
+
+  // Curve launches: every one has curve trades to index, and a graduated one
+  // has a pool as well. Both are keyed by the token so a trader's curve buys
+  // and pool sells land in the same position.
+  if (isCurveDeployed) {
+    const count = Number(
+      (await pub.readContract({ address: CURVE_ADDRESS, abi: curveAbi, functionName: "curveCount" })) as bigint,
+    );
+    const from = Math.max(0, count - 200);
+    const curves = await pub.multicall({
+      contracts: Array.from({ length: count - from }, (_, i) => ({
+        address: CURVE_ADDRESS,
+        abi: curveAbi,
+        functionName: "curveAt" as const,
+        args: [BigInt(from + i)] as const,
+      })),
+      allowFailure: true,
+    });
+    for (const r of curves) {
+      if (r.status !== "success") continue;
+      const c = r.result as { token: Address; createdAt: bigint; graduated: boolean };
+      const createdAt = Number(c.createdAt);
+      entries.push({ pool: curveKey(c.token), token: c.token, createdAt, curve: true });
+      if (c.graduated) entries.push({ pool: poolIdFor(c.token), token: c.token, createdAt });
+    }
+  }
+
   if (entries.length > 0) {
     await cmd("SET", K.pools, JSON.stringify(entries));
   }
@@ -91,12 +168,13 @@ async function loadPools(): Promise<PoolRef[]> {
   return syncPools();
 }
 
-/// Fold one pool's new swaps into the positions they belong to.
+/// Fold one source's new trades into the positions they belong to.
 async function indexPool(
   pool: string,
   token: string,
   head: bigint,
   createdAt: number,
+  curve = false,
 ): Promise<{ swaps: number; caughtUp: boolean }> {
   const pub = client();
   const stored = await cmd<string | null>("GET", K.cursor(pool));
@@ -111,21 +189,35 @@ async function indexPool(
 
   while (from <= head && chunks < MAX_CHUNKS_PER_RUN) {
     const to = from + CHUNK - 1n > head ? head : from + CHUNK - 1n;
-    const logs = await pub.getLogs({
-      address: pool as Address,
-      event: SWAP_EVENT,
-      fromBlock: from,
-      toBlock: to,
-    });
+    const rows: TradeRow[] = curve
+      ? (
+          await pub.getLogs({
+            address: CURVE_ADDRESS,
+            event: CURVE_TRADE_EVENT,
+            args: { token: token as Address },
+            fromBlock: from,
+            toBlock: to,
+          })
+        )
+          .map(fromCurveTrade)
+          .filter((r): r is TradeRow => r !== null)
+      : (
+          await pub.getLogs({
+            address: SWAP_ROUTER_ADDRESS,
+            event: SWAP_EVENT,
+            args: { id: pool as `0x${string}` },
+            fromBlock: from,
+            toBlock: to,
+          })
+        )
+          .map(fromSwap)
+          .filter((r): r is TradeRow => r !== null);
 
     // Group by trader so a busy chunk costs one read and one write per trader,
     // not one per swap.
     const touched = new Map<string, Position>();
     const order: string[] = [];
-    for (const log of logs) {
-      const a = log.args as { recipient?: Address; amount0?: bigint; amount1?: bigint };
-      if (!a.recipient || a.amount0 === undefined || a.amount1 === undefined) continue;
-      const who = a.recipient.toLowerCase();
+    for (const { who } of rows) {
       if (NOT_A_TRADER.has(who)) continue;
       if (!touched.has(who)) {
         order.push(who);
@@ -141,20 +233,10 @@ async function indexPool(
       });
     }
 
-    for (const log of logs) {
-      const a = log.args as { recipient?: Address; amount0?: bigint; amount1?: bigint };
-      if (!a.recipient || a.amount0 === undefined || a.amount1 === undefined) continue;
-      const who = a.recipient.toLowerCase();
-      if (NOT_A_TRADER.has(who)) continue;
-      const cur = touched.get(who) ?? EMPTY;
-      // token0 is the launch token, token1 is USDC. Negative means the pool paid
-      // it out, so amount0 < 0 is the trader receiving tokens: a buy.
-      touched.set(
-        who,
-        a.amount0 < 0n
-          ? applyBuy(cur, a.amount1, -a.amount0)
-          : applySell(cur, a.amount0, -a.amount1),
-      );
+    for (const r of rows) {
+      if (NOT_A_TRADER.has(r.who)) continue;
+      const cur = touched.get(r.who) ?? EMPTY;
+      touched.set(r.who, r.buy ? applyBuy(cur, r.usdc, r.tokens) : applySell(cur, r.tokens, r.usdc));
       swaps++;
     }
 
@@ -218,7 +300,7 @@ export async function runIndexer(): Promise<{
 
   for (const p of ranked.slice(0, MAX_POOLS_PER_RUN)) {
     try {
-      const r = await indexPool(p.pool, p.token, head, p.createdAt);
+      const r = await indexPool(p.pool, p.token, head, p.createdAt, p.curve);
       swaps += r.swaps;
       indexed++;
       if (!r.caughtUp) behind++;

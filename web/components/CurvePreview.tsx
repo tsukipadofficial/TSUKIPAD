@@ -70,8 +70,8 @@ export function CurvePreview({
       >
         <defs>
           <linearGradient id={gradientId} x1="0" y1="1" x2="0" y2="0">
-            <stop offset="0%" stopColor="#c8ff2e" stopOpacity="0.04" />
-            <stop offset="100%" stopColor="#c8ff2e" stopOpacity="0.28" />
+            <stop offset="0%" stopColor="var(--color-lime)" stopOpacity="0.04" />
+            <stop offset="100%" stopColor="var(--color-lime)" stopOpacity="0.28" />
           </linearGradient>
         </defs>
 
@@ -82,7 +82,7 @@ export function CurvePreview({
             x2={W - PAD}
             y1={PAD + g * (H - PAD * 2)}
             y2={PAD + g * (H - PAD * 2)}
-            stroke="#2c2c35"
+            stroke="var(--color-line)"
             strokeWidth="1"
             strokeDasharray="3 4"
           />
@@ -95,7 +95,7 @@ export function CurvePreview({
         <polyline
           points={points.join(" ")}
           fill="none"
-          stroke="#c8ff2e"
+          stroke="var(--color-lime)"
           strokeWidth="2.5"
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -108,12 +108,12 @@ export function CurvePreview({
               x2={markerX}
               y1={PAD}
               y2={H - PAD}
-              stroke="#29e5f5"
+              stroke="var(--color-cyan)"
               strokeWidth="1.5"
               strokeDasharray="3 3"
             />
-            <circle cx={markerX} cy={markerY} r="4.5" fill="#29e5f5" />
-            <circle cx={markerX} cy={markerY} r="8" fill="#29e5f5" opacity="0.25" />
+            <circle cx={markerX} cy={markerY} r="4.5" fill="var(--color-cyan)" />
+            <circle cx={markerX} cy={markerY} r="8" fill="var(--color-cyan)" opacity="0.25" />
           </>
         ) : null}
       </svg>

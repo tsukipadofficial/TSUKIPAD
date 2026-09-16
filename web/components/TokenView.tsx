@@ -11,7 +11,6 @@ import { CurvePreview } from "./CurvePreview";
 import { TokenMark } from "./LaunchCard";
 import { TradePanel } from "./TradePanel";
 import { RewardsPanel } from "./RewardsPanel";
-import { CreatorLockPanel } from "./CreatorLockPanel";
 import { BurnPanel } from "./BurnPanel";
 import { FeesPanel } from "./FeesPanel";
 import { CopyAddress } from "./CopyAddress";
@@ -142,11 +141,6 @@ export function TokenView({ token }: { token: Address }) {
     launch.feeRecipient.toLowerCase() !== launch.creator.toLowerCase();
   const funds = beneficiaryLink(meta.fundsLabel);
 
-  const allocationLocked =
-    launch.creatorAllocation > 0n &&
-    !launch.allocationClaimed &&
-    Date.now() / 1000 < Number(launch.unlockAt);
-
   const price = tickToHumanPrice(launch.currentTick);
   const multiple = launch.marketCapUsd / launch.startMarketCapUsd;
   const soldOut = launch.curveProgress >= 0.999;
@@ -179,7 +173,6 @@ export function TokenView({ token }: { token: Address }) {
             {launch.rewardsEnabled ? <Badge tone="cyan">{t("token.holdersEarn")}</Badge> : null}
             {launch.buybackAndBurn ? <Badge tone="pink">{t("token.deflationary")}</Badge> : null}
             {redirected ? <Badge tone="pink">{t("token.feesFund")}</Badge> : null}
-            {allocationLocked ? <Badge tone="cyan">{t("token.creatorLocked")}</Badge> : null}
           </div>
 
           {meta.description ? (
@@ -205,6 +198,19 @@ export function TokenView({ token }: { token: Address }) {
             >
               pool
             </a>
+            {meta.website ? (
+              <>
+                <span className="text-faint">·</span>
+                <a
+                  href={meta.website.startsWith("http") ? meta.website : `https://${meta.website}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-muted underline-offset-4 hover:text-cyan hover:underline"
+                >
+                  website
+                </a>
+              </>
+            ) : null}
             {meta.twitter ? (
               <>
                 <span className="text-faint">·</span>
@@ -388,8 +394,6 @@ export function TokenView({ token }: { token: Address }) {
           <RewardsPanel launch={launch} />
 
           <BurnPanel launch={launch} />
-
-          <CreatorLockPanel launch={launch} />
 
           {/* A launch whose fees are earmarked has no recipient until somebody
               proves the account is theirs, so a zero recipient is the signal. */}

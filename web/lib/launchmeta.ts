@@ -7,14 +7,14 @@
 
 import { createPublicClient, http, type Address } from "viem";
 
-import { launchpadAbi, launchTokenAbi, uniswapV3PoolAbi } from "./abi";
-import { LAUNCHPAD_ADDRESS, INDEXER_RPC_URL, chain } from "./config";
+import { launchpadAbi, launchTokenAbi, stateViewAbi } from "./abi";
+import { poolIdFor } from "./v4";
+import { LAUNCHPAD_ADDRESS, STATE_VIEW_ADDRESS, INDEXER_RPC_URL, chain } from "./config";
 import { priceX18FromSqrt, marketCapFromSqrtPriceX96 } from "./launch-math";
 import { decodeMetadata, safeImageUrl } from "./metadata";
 
 export type LaunchMeta = {
   token: string;
-  pool: string;
   name: string;
   symbol: string;
   image?: string;
@@ -40,13 +40,13 @@ async function load(): Promise<Map<string, LaunchMeta>> {
     abi: launchpadAbi,
     functionName: "recentLaunches",
     args: [0n, 200n],
-  })) as readonly { token: Address; pool: Address }[];
+  })) as readonly { token: Address }[];
 
   const out = new Map<string, LaunchMeta>();
   if (launches.length === 0) return out;
 
   const calls = launches.flatMap((l) => [
-    { address: l.pool, abi: uniswapV3PoolAbi, functionName: "slot0" },
+    { address: STATE_VIEW_ADDRESS, abi: stateViewAbi, functionName: "getSlot0", args: [poolIdFor(l.token)] },
     { address: l.token, abi: launchTokenAbi, functionName: "name" },
     { address: l.token, abi: launchTokenAbi, functionName: "symbol" },
     { address: l.token, abi: launchTokenAbi, functionName: "totalSupply" },
@@ -68,7 +68,6 @@ async function load(): Promise<Map<string, LaunchMeta>> {
     const meta = decodeMetadata((res[b + 4]?.result as string | undefined) ?? "");
     out.set(l.token.toLowerCase(), {
       token: l.token,
-      pool: l.pool,
       name: (res[b + 1]?.result as string | undefined) ?? "",
       symbol: (res[b + 2]?.result as string | undefined) ?? "",
       image: safeImageUrl(meta.image),

@@ -95,7 +95,47 @@ export const SWAP_ROUTER_ADDRESS = required(
 export const isDeployed =
   LAUNCHPAD_ADDRESS !== "0x0000000000000000000000000000000000000000";
 
+/// The bonding-curve launchpad. Separate from LAUNCHPAD_ADDRESS because it is a
+/// separate contract: direct launches open straight into a pool, curve launches
+/// trade on the curve until they sell out and graduate into one.
+export const CURVE_ADDRESS = required(
+  "NEXT_PUBLIC_CURVE_ADDRESS",
+  process.env.NEXT_PUBLIC_CURVE_ADDRESS,
+);
+
+/// Uniswap v4. Every pool lives inside the one manager, so a launch is a pool
+/// *key* rather than a pool address, prices are read through StateView, and
+/// quotes come from the quoter. The hook is what charges the creator tax -- on
+/// the curve and in the pool alike, which is the whole reason for v4 here.
+export const POOL_MANAGER_ADDRESS = required(
+  "NEXT_PUBLIC_POOL_MANAGER_ADDRESS",
+  process.env.NEXT_PUBLIC_POOL_MANAGER_ADDRESS,
+);
+
+export const HOOK_ADDRESS = required("NEXT_PUBLIC_HOOK_ADDRESS", process.env.NEXT_PUBLIC_HOOK_ADDRESS);
+
+/// Both pads deploy their tokens through this, so it -- not the pad -- is the
+/// CREATE2 deployer a salt has to be mined against.
+export const TOKEN_DEPLOYER_ADDRESS = required(
+  "NEXT_PUBLIC_TOKEN_DEPLOYER_ADDRESS",
+  process.env.NEXT_PUBLIC_TOKEN_DEPLOYER_ADDRESS,
+);
+
+export const STATE_VIEW_ADDRESS = required(
+  "NEXT_PUBLIC_STATE_VIEW_ADDRESS",
+  process.env.NEXT_PUBLIC_STATE_VIEW_ADDRESS,
+);
+
+export const QUOTER_ADDRESS = required("NEXT_PUBLIC_QUOTER_ADDRESS", process.env.NEXT_PUBLIC_QUOTER_ADDRESS);
+
+/// Ceiling on the creator tax, mirroring TsukiHook.MAX_CREATOR_TAX_BPS. Read
+/// from the hook where a live value matters; this is the form's default bound.
+export const MAX_CREATOR_TAX_BPS = 1_000;
+
+export const isCurveDeployed =
+  CURVE_ADDRESS !== "0x0000000000000000000000000000000000000000";
+
 /// Defaults the create form starts from.
 export const DEFAULT_SUPPLY = 1_000_000_000n; // 1B whole tokens
-export const DEFAULT_START_MCAP_USD = 3_000;
+export const DEFAULT_START_MCAP_USD = 2_500;
 export const DEFAULT_CEILING_MULTIPLE = 10_000;

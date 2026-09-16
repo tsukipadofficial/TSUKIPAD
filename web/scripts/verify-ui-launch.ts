@@ -111,6 +111,7 @@ async function main() {
         buybackAndBurn: false,
         recipientCommitment: ("0x" + "0".repeat(64)) as `0x${string}`,
         referrer: "0x0000000000000000000000000000000000000000" as `0x${string}`,
+        creatorTaxBps: 0,
       },
     ],
   });
@@ -123,10 +124,10 @@ async function main() {
     try {
       const parsed = decodeEventLog({ abi: launchpadAbi, data: log.data, topics: log.topics });
       if (parsed.eventName === "Launched") {
-        const args = parsed.args as { token: string; pool: string };
+        const args = parsed.args as { token: string; poolId: string };
         console.log("\nLaunched event:");
         console.log("  token:", args.token);
-        console.log("  pool :", args.pool);
+        console.log("  pool :", args.poolId);
         if (args.token.toLowerCase() !== predicted.toLowerCase()) {
           throw new Error("deployed address differs from the browser prediction");
         }

@@ -1,10 +1,10 @@
 import type { Address } from "viem";
 import { isAddress } from "viem";
 import { notFound } from "next/navigation";
-import { TokenView } from "@/components/TokenView";
+import { TokenRouter } from "@/components/TokenRouter";
 
 export default async function TokenPage({ params }: PageProps<"/token/[address]">) {
   const { address } = await params;
   if (!isAddress(address)) notFound();
-  return <TokenView token={address as Address} />;
+  return <TokenRouter token={address as Address} />;
 }

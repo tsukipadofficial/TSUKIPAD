@@ -5,10 +5,11 @@ import { zeroAddress } from "viem";
 import { useAccount, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 
 import { Button, Card, cx } from "./ui";
-import { launchpadAbi, uniswapV3PoolAbi } from "@/lib/abi";
-import { LAUNCHPAD_ADDRESS, USDC_DECIMALS, chain } from "@/lib/config";
+import { launchpadAbi, stateViewAbi } from "@/lib/abi";
+import { poolIdFor } from "@/lib/v4";
+import { LAUNCHPAD_ADDRESS, USDC_DECIMALS, chain, STATE_VIEW_ADDRESS } from "@/lib/config";
 import { formatUsd, formatUnitsFloat, shortAddress } from "@/lib/format";
-import { pendingFees, positionKey, splitFees, type PositionInfo, type TickInfo } from "@/lib/fees";
+import { pendingFees, splitFees } from "@/lib/fees";
 import { useT } from "@/lib/i18n";
 import type { LaunchView } from "@/lib/hooks";
 
@@ -37,19 +38,25 @@ export function FeesPanel({ launch }: { launch: LaunchView }) {
   const [busy, setBusy] = useState(false);
 
   const pool = launch.pool;
-  const key = useMemo(
-    () => positionKey(LAUNCHPAD_ADDRESS, launch.tickLower, launch.tickUpper),
-    [launch.tickLower, launch.tickUpper],
-  );
+  const poolId = useMemo(() => poolIdFor(launch.token), [launch.token]);
+  const ZERO_SALT = "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
 
   const { data } = useReadContracts({
     contracts: [
-      { address: pool, abi: uniswapV3PoolAbi, functionName: "positions", args: [key] },
-      { address: pool, abi: uniswapV3PoolAbi, functionName: "ticks", args: [launch.tickLower] },
-      { address: pool, abi: uniswapV3PoolAbi, functionName: "ticks", args: [launch.tickUpper] },
-      { address: pool, abi: uniswapV3PoolAbi, functionName: "feeGrowthGlobal0X128" },
-      { address: pool, abi: uniswapV3PoolAbi, functionName: "feeGrowthGlobal1X128" },
-      { address: pool, abi: uniswapV3PoolAbi, functionName: "slot0" },
+      // v4 reports the growth inside a range directly, so what a position has
+      // earned is one subtraction rather than a reimplementation of tick math.
+      {
+        address: STATE_VIEW_ADDRESS,
+        abi: stateViewAbi,
+        functionName: "getPositionInfo",
+        args: [poolId, LAUNCHPAD_ADDRESS, launch.tickLower, launch.tickUpper, ZERO_SALT],
+      },
+      {
+        address: STATE_VIEW_ADDRESS,
+        abi: stateViewAbi,
+        functionName: "getFeeGrowthInside",
+        args: [poolId, launch.tickLower, launch.tickUpper],
+      },
       { address: LAUNCHPAD_ADDRESS, abi: launchpadAbi, functionName: "protocolFeeBps" },
       { address: LAUNCHPAD_ADDRESS, abi: launchpadAbi, functionName: "referralOf", args: [launch.token] },
       { address: LAUNCHPAD_ADDRESS, abi: launchpadAbi, functionName: "treasury" },
@@ -60,40 +67,18 @@ export function FeesPanel({ launch }: { launch: LaunchView }) {
   const view = useMemo(() => {
     if (!data || data.some((d) => d.status !== "success")) return null;
 
-    const pos = data[0].result as readonly [bigint, bigint, bigint, bigint, bigint];
-    const lo = data[1].result as readonly unknown[];
-    const hi = data[2].result as readonly unknown[];
-    const slot0 = data[5].result as readonly [bigint, number, ...unknown[]];
+    const pos = data[0].result as readonly [bigint, bigint, bigint];
+    const inside = data[1].result as readonly [bigint, bigint];
 
-    const position: PositionInfo = {
+    const owed = pendingFees({
       liquidity: pos[0],
       feeGrowthInside0LastX128: pos[1],
       feeGrowthInside1LastX128: pos[2],
-      tokensOwed0: pos[3],
-      tokensOwed1: pos[4],
-    };
-    // ticks() returns feeGrowthOutside at indices 2 and 3.
-    const lower: TickInfo = {
-      feeGrowthOutside0X128: lo[2] as bigint,
-      feeGrowthOutside1X128: lo[3] as bigint,
-    };
-    const upper: TickInfo = {
-      feeGrowthOutside0X128: hi[2] as bigint,
-      feeGrowthOutside1X128: hi[3] as bigint,
-    };
-
-    const owed = pendingFees({
-      position,
-      lower,
-      upper,
-      feeGrowthGlobal0X128: data[3].result as bigint,
-      feeGrowthGlobal1X128: data[4].result as bigint,
-      tickCurrent: slot0[1],
-      tickLower: launch.tickLower,
-      tickUpper: launch.tickUpper,
+      feeGrowthInside0X128: inside[0],
+      feeGrowthInside1X128: inside[1],
     });
 
-    const referral = data[7].result as readonly [string, number];
+    const referral = data[3].result as readonly [string, number];
     const hasReferrer = referral[0] !== zeroAddress;
 
     // The token side is sold for USDC before anything is split, so the preview
@@ -107,12 +92,12 @@ export function FeesPanel({ launch }: { launch: LaunchView }) {
 
     return {
       usdcSide,
-      treasury: data[8].result as `0x${string}`,
+      treasury: data[4].result as `0x${string}`,
       referrer: referral[0] as `0x${string}`,
       hasReferrer,
       split: splitFees({
         usdcSide,
-        protocolFeeBps: Number(data[6].result),
+        protocolFeeBps: Number(data[2].result),
         referralBps: Number(referral[1]),
         hasReferrer,
       }),

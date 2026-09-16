@@ -19,8 +19,10 @@ export function Button({
   ...rest
 }: ButtonProps) {
   const variants = {
-    lime: "bg-lime text-void hover:bg-[#d8ff5e]",
-    pink: "bg-pink text-void hover:bg-[#ff629f]",
+    // text-void, not a fixed dark: on paper the ground is what reads against a
+    // filled button, same as near-black does on the dark ground.
+    lime: "bg-lime text-void hover:bg-lime-hi",
+    pink: "bg-pink text-void hover:bg-pink-hi",
     ghost: "bg-surface-2 text-ink border-line hover:border-lime",
   };
   const sizes = {

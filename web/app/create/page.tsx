@@ -7,41 +7,45 @@ import { parseUnits, decodeEventLog, isAddress, zeroAddress, type Address, type 
 import {
   useAccount,
   usePublicClient,
+  useReadContract,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
 import { EMPTY_COMMITMENT, accountReferrer } from "@/lib/referral";
 import { PROVIDERS, commitmentFor, labelFor, type Provider } from "@/lib/commitment";
 
-import { Badge, Button, Card, Stat, cx } from "@/components/ui";
-import { CurvePreview } from "@/components/CurvePreview";
+import { Badge, Button, Card, cx } from "@/components/ui";
 import { ImagePicker } from "@/components/ImagePicker";
-import { launchpadAbi } from "@/lib/abi";
+import { curveAbi, erc20Abi, launchpadAbi } from "@/lib/abi";
 import {
+  useCurveConfig,
+  openingMarketCapUsd,
+  graduationMarketCapUsd,
+  grossToGraduateUsd,
+} from "@/lib/curve";
+import {
+  CURVE_ADDRESS,
   LAUNCHPAD_ADDRESS,
+  USDC_ADDRESS,
+  USDC_DECIMALS,
   TOKEN_DECIMALS,
   DEFAULT_SUPPLY,
   DEFAULT_START_MCAP_USD,
   DEFAULT_CEILING_MULTIPLE,
   isDeployed,
+  isCurveDeployed,
   chain,
+  TOKEN_DEPLOYER_ADDRESS,
 } from "@/lib/config";
 import {
   startTickForMarketCap,
   ceilingTick,
   marketCapAtTick,
-  curveCapacityUsd,
   mineSalt,
-  tickToHumanPrice,
 } from "@/lib/launch-math";
 import { encodeMetadata, beneficiaryLink } from "@/lib/metadata";
-import { formatUsd, formatTokenPrice } from "@/lib/format";
+import { formatUsd, formatUnitsFloat } from "@/lib/format";
 import { useT } from "@/lib/i18n";
-
-/// Ceiling multiples offered on the form. The top option exists so a launch can
-/// price a path to a billion-dollar cap without the pool selling out first —
-/// all of these stay comfortably inside Uniswap's tick bounds.
-const CEILING_OPTIONS = [1_000, 10_000, 100_000];
 
 export default function CreatePage() {
   const t = useT();
@@ -54,11 +58,10 @@ export default function CreatePage() {
   const [symbol, setSymbol] = useState("");
   const [description, setDescription] = useState("");
   const [image, setImage] = useState("");
+  const [website, setWebsite] = useState("");
   const [twitter, setTwitter] = useState("");
   const [telegram, setTelegram] = useState("");
 
-  const [startMcap, setStartMcap] = useState(DEFAULT_START_MCAP_USD);
-  const [ceilingMultiple, setCeilingMultiple] = useState(DEFAULT_CEILING_MULTIPLE);
   const [allocationPct, setAllocationPct] = useState(0);
   /// Where the creator's half of swap fees goes. Immutable once launched, so
   /// this is surfaced as an explicit choice rather than a buried setting.
@@ -78,6 +81,81 @@ export default function CreatePage() {
   const recipientValid =
     !redirecting || (earmarking ? commitment !== null : isAddress(feeRecipientInput.trim()));
 
+  /// A curve launch trades on the bonding curve until it graduates; a direct
+  /// launch opens straight into a pool. The curve is the default because it is
+  /// what most people arriving from other launchpads expect.
+  const [launchType, setLaunchType] = useState<"curve" | "direct">(
+    isCurveDeployed ? "curve" : "direct",
+  );
+  const onCurve = launchType === "curve" && isCurveDeployed;
+  const curveConfig = useCurveConfig();
+  const [devBuy, setDevBuy] = useState("");
+  const [curveHolders, setCurveHolders] = useState(false);
+  const [curveWallet, setCurveWallet] = useState("");
+  const [creatorTaxPct, setCreatorTaxPct] = useState(0);
+  const [exempt, setExempt] = useState<Address[]>([]);
+  const [exemptDraft, setExemptDraft] = useState("");
+  const [advanced, setAdvanced] = useState(false);
+
+  const { data: usdcBalance } = useReadContract({
+    address: USDC_ADDRESS,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address && onCurve, refetchInterval: 20_000 },
+  });
+  const usdcFloat = formatUnitsFloat((usdcBalance as bigint | undefined) ?? 0n, USDC_DECIMALS);
+
+  // What share of trading fees the creator keeps. Read from whichever contract
+  // this launch will use, never hardcoded: it is fixed at deployment, and a
+  // redeploy that changed it would otherwise leave the form quoting the old one.
+  const { data: padProtocolBps } = useReadContract({
+    address: LAUNCHPAD_ADDRESS,
+    abi: launchpadAbi,
+    functionName: "protocolFeeBps",
+    query: { enabled: isDeployed && !onCurve },
+  });
+  const devBuyWei = useMemo(() => {
+    const trimmed = devBuy.trim();
+    if (!trimmed || Number.isNaN(Number(trimmed))) return 0n;
+    try {
+      return parseUnits(trimmed, USDC_DECIMALS);
+    } catch {
+      return 0n;
+    }
+  }, [devBuy]);
+  const devBuyOk = usdcBalance === undefined || devBuyWei <= (usdcBalance as bigint);
+  const curveWalletValid = curveWallet.trim() === "" || isAddress(curveWallet.trim());
+  const creatorTaxBps = Math.round(creatorTaxPct * 100);
+  const maxTaxBps = curveConfig?.maxCreatorTaxBps ?? 500;
+  const creatorTaxOk = creatorTaxBps >= 0 && creatorTaxBps <= maxTaxBps;
+  const exemptFull = exempt.length >= (curveConfig?.maxSnipeExempt ?? 16);
+
+  // Fee summary for the preview: the recipient's cut of a curve trade is their
+  // share of the base fee plus the whole creator tax.
+  const totalFeeBps = (curveConfig?.tradeFeeBps ?? 100) + creatorTaxBps;
+  const yoursBps = curveConfig
+    ? (curveConfig.tradeFeeBps * (10_000 - curveConfig.protocolFeeBps)) / 10_000 + creatorTaxBps
+    : creatorTaxBps;
+  const pct = (bps: number) => `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 2)}%`;
+  const protocolBps = onCurve
+    ? curveConfig?.protocolFeeBps
+    : (padProtocolBps as number | undefined);
+  const splitLabel =
+    protocolBps === undefined
+      ? "…"
+      : t("fees.split.v", { creator: pct(10_000 - protocolBps), protocol: pct(protocolBps) });
+  const goalUsd = curveConfig ? Number(curveConfig.graduationUsdc) / 10 ** USDC_DECIMALS : 0;
+  const devBuyGraduates =
+    !!curveConfig && devBuyWei > 0n && Number(devBuy) >= grossToGraduateUsd(curveConfig, creatorTaxBps);
+
+  function addExempt() {
+    const a = exemptDraft.trim();
+    if (!isAddress(a) || exemptFull || exempt.some((x) => x.toLowerCase() === a.toLowerCase())) return;
+    setExempt([...exempt, a as Address]);
+    setExemptDraft("");
+  }
+
   const [mining, setMining] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,30 +163,31 @@ export default function CreatePage() {
   const supply = DEFAULT_SUPPLY;
 
   // --- derived economics -------------------------------------------------
-  const { tickLower, tickUpper, startActual, ceilingActual, capacity, openPrice } =
+  const { tickLower, tickUpper, startActual, ceilingActual } =
     useMemo(() => {
-      const lower = startTickForMarketCap(startMcap, supply);
-      const upper = ceilingTick(lower, ceilingMultiple);
+      // Every direct launch opens at the same market cap with the same ceiling,
+      // so no launch can be priced to trap its buyers.
+      const lower = startTickForMarketCap(DEFAULT_START_MCAP_USD, supply);
+      const upper = ceilingTick(lower, DEFAULT_CEILING_MULTIPLE);
       return {
         tickLower: lower,
         tickUpper: upper,
         startActual: marketCapAtTick(lower, supply),
         ceilingActual: marketCapAtTick(upper, supply),
-        capacity: curveCapacityUsd(lower, upper, supply),
-        openPrice: tickToHumanPrice(lower),
       };
-    }, [startMcap, ceilingMultiple, supply]);
+    }, [supply]);
 
   const metadataURI = useMemo(
     () =>
       encodeMetadata({
         description,
         image,
+        website,
         twitter,
         telegram,
         fundsLabel: redirecting ? fundsLabel : "",
       }),
-    [description, image, twitter, telegram, redirecting, fundsLabel],
+    [description, image, website, twitter, telegram, redirecting, fundsLabel],
   );
 
   const totalSupplyWei = parseUnits(supply.toString(), TOKEN_DECIMALS);
@@ -118,22 +197,21 @@ export default function CreatePage() {
   const receipt = useWaitForTransactionReceipt({ hash: txHash });
 
   // On confirmation, pull the token address straight out of the Launched event.
+  // Both launchpads emit one, with `token` as the first indexed argument.
   useEffect(() => {
     if (!receipt.data) return;
     for (const log of receipt.data.logs) {
-      try {
-        const parsed = decodeEventLog({
-          abi: launchpadAbi,
-          data: log.data,
-          topics: log.topics,
-        });
-        if (parsed.eventName === "Launched") {
-          const token = (parsed.args as { token: Address }).token;
-          router.push(`/token/${token}`);
-          return;
+      for (const abi of [launchpadAbi, curveAbi] as const) {
+        try {
+          const parsed = decodeEventLog({ abi, data: log.data, topics: log.topics });
+          if (parsed.eventName === "Launched") {
+            const token = (parsed.args as { token: Address }).token;
+            router.push(`/token/${token}`);
+            return;
+          }
+        } catch {
+          // Not this contract's event; keep scanning.
         }
-      } catch {
-        // Not our event; keep scanning.
       }
     }
   }, [receipt.data, router]);
@@ -142,16 +220,91 @@ export default function CreatePage() {
   const symbolOk = /^[A-Z0-9]{2,10}$/.test(symbol.trim().toUpperCase());
   const wrongChain = isConnected && chainId !== chain.id;
   const canSubmit =
-    isDeployed &&
+    (onCurve ? !!curveConfig && curveWalletValid && creatorTaxOk && devBuyOk : isDeployed && recipientValid) &&
     isConnected &&
     !wrongChain &&
     nameOk &&
     symbolOk &&
-    recipientValid &&
     !mining &&
     !txHash;
 
+  async function handleCurveLaunch() {
+    if (!address || !publicClient) return;
+    setError(null);
+    setMining(true);
+    try {
+      const cleanName = name.trim();
+      const cleanSymbol = symbol.trim().toUpperCase();
+
+      // Same CREATE2 constraint as a direct launch, mined against the curve
+      // contract because that is what deploys the token.
+      setStatus(t("status.hashing"));
+      const initCodeHash = (await publicClient.readContract({
+        address: CURVE_ADDRESS,
+        abi: curveAbi,
+        functionName: "tokenInitCodeHash",
+        args: [address, cleanName, cleanSymbol, metadataURI, curveHolders],
+      })) as Hex;
+
+      setStatus(t("status.mining"));
+      const { salt, token, attempts } = mineSalt(TOKEN_DEPLOYER_ADDRESS, address, initCodeHash);
+      setStatus(t("status.found", { addr: token.slice(0, 10), n: attempts }));
+
+      // A developer buy is pulled by the curve inside the launch transaction,
+      // so it needs an allowance first. Only exactly that amount is approved.
+      if (devBuyWei > 0n) {
+        const allowance = (await publicClient.readContract({
+          address: USDC_ADDRESS,
+          abi: erc20Abi,
+          functionName: "allowance",
+          args: [address, CURVE_ADDRESS],
+        })) as bigint;
+        if (allowance < devBuyWei) {
+          setStatus(t("status.approving"));
+          const approveHash = await writeContractAsync({
+            address: USDC_ADDRESS,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [CURVE_ADDRESS, devBuyWei],
+          });
+          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        }
+      }
+
+      const hash = await writeContractAsync({
+        address: CURVE_ADDRESS,
+        abi: curveAbi,
+        functionName: "launch",
+        args: [
+          {
+            name: cleanName,
+            symbol: cleanSymbol,
+            metadataURI,
+            salt,
+            devBuyUsdc: devBuyWei,
+            // The token does not exist before this transaction, so nothing
+            // can trade ahead of the developer buy; the quote is exact.
+            minTokensOut: 0n,
+            feeRecipient: curveWallet.trim() ? (curveWallet.trim() as Address) : zeroAddress,
+            creatorTaxBps,
+            rewardHolders: curveHolders,
+            snipeExempt: exempt,
+          },
+        ],
+      });
+      setTxHash(hash);
+      setStatus(t("status.launching"));
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Launch failed.";
+      setError(message.split("\n")[0]);
+      setStatus(null);
+    } finally {
+      setMining(false);
+    }
+  }
+
   async function handleLaunch() {
+    if (onCurve) return handleCurveLaunch();
     if (!address || !publicClient) return;
     setError(null);
     setMining(true);
@@ -174,7 +327,7 @@ export default function CreatePage() {
       })) as Hex;
 
       setStatus(t("status.mining"));
-      const { salt, token, attempts } = mineSalt(LAUNCHPAD_ADDRESS, address, initCodeHash);
+      const { salt, token, attempts } = mineSalt(TOKEN_DEPLOYER_ADDRESS, address, initCodeHash);
       setStatus(t("status.found", { addr: token.slice(0, 10), n: attempts }));
 
       const hash = await writeContractAsync({
@@ -191,6 +344,9 @@ export default function CreatePage() {
             tickLower,
             tickUpper,
             creatorAllocationBps: Math.round(allocationPct * 100),
+            // The hook charges this on every swap for as long as the token
+            // trades -- buys and sells alike, before and after graduation.
+            creatorTaxBps,
             rewardHolders,
             // An earmarked launch has no recipient at all until somebody proves
             // the identity is theirs, so it deliberately goes out with zero.
@@ -268,6 +424,15 @@ export default function CreatePage() {
               <ImagePicker value={image} onChange={setImage} />
             </Field>
 
+            <Field label={t("field.website")} optional>
+              <input
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                placeholder="yourproject.com"
+                className={inputCx(true)}
+              />
+            </Field>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="X / Twitter" optional>
                 <input
@@ -289,52 +454,196 @@ export default function CreatePage() {
 
             <hr className="border-line" />
 
-            <Field
-              label={t("field.openingMcap")}
-              hint={t("field.openingMcap.hint")}
+            {isCurveDeployed && isDeployed ? (
+              <div>
+                <span className="eyebrow mb-1.5 block">{t("create.type")}</span>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(["curve", "direct"] as const).map((kind) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      onClick={() => setLaunchType(kind)}
+                      className={cx(
+                        "block border-2 p-3 text-left transition-colors",
+                        launchType === kind ? "border-lime bg-lime/10" : "border-line hover:border-line-bright",
+                      )}
+                    >
+                      <span
+                        className={cx("block text-sm font-bold", launchType === kind ? "text-lime" : "text-ink")}
+                      >
+                        {t(kind === "curve" ? "create.type.curve.t" : "create.type.direct.t")}
+                      </span>
+                      <span className="mt-1 block text-xs leading-snug text-muted">
+                        {kind === "curve"
+                          ? t("create.type.curve.b", {
+                              goal: formatUsd(goalUsd, { compact: false }),
+                              mcap: curveConfig ? formatUsd(graduationMarketCapUsd(curveConfig)) : "…",
+                            })
+                          : t("create.type.direct.b")}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+                <Field
+              label={t("curve.tax")}
+              hint={t("curve.tax.hint", {
+                total: pct(totalFeeBps),
+                yours: pct(yoursBps),
+                max: pct(maxTaxBps),
+              })}
             >
-              <div className="flex items-center gap-3">
+              <div
+                className={cx(
+                  "flex items-center border-2 bg-void focus-within:border-lime",
+                  creatorTaxOk ? "border-line" : "border-pink",
+                )}
+              >
                 <input
-                  type="range"
-                  min={1_000}
-                  max={10_000}
-                  step={500}
-                  value={startMcap}
-                  onChange={(e) => setStartMcap(Number(e.target.value))}
-                  className="h-2 flex-1 cursor-pointer appearance-none bg-line accent-lime"
+                  type="number"
+                  min={0}
+                  max={maxTaxBps / 100}
+                  step={0.5}
+                  value={creatorTaxPct}
+                  onChange={(e) => setCreatorTaxPct(Number(e.target.value))}
+                  className="tabular w-full bg-transparent px-3 py-2 text-sm outline-none"
                 />
-                <span className="tabular w-20 text-right text-lg font-bold text-lime">
-                  {formatUsd(startActual)}
-                </span>
+                <span className="px-3 text-sm text-muted">%</span>
               </div>
             </Field>
 
-            <Field
-              label={t("field.ceiling")}
-              hint={t("field.ceiling.hint")}
-            >
-              <div className="flex gap-2">
-                {CEILING_OPTIONS.map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setCeilingMultiple(m)}
+            {onCurve ? (
+              <>
+                <Field
+                  label={t("curve.devBuy")}
+                  optional
+                  hint={t("curve.devBuy.hint", {
+                    bal: usdcFloat.toLocaleString("en-US", { maximumFractionDigits: 2 }),
+                  })}
+                >
+                  <div
                     className={cx(
-                      "flex-1 border-2 px-3 py-2 text-sm font-bold transition-colors",
-                      ceilingMultiple === m
-                        ? "border-lime bg-lime text-void"
-                        : "border-line text-muted hover:border-line-bright hover:text-ink",
+                      "flex items-center border-2 bg-void focus-within:border-lime",
+                      devBuyOk ? "border-line" : "border-pink",
                     )}
                   >
-                    {m >= 1_000_000
-                      ? `${m / 1_000_000}M×`
-                      : m >= 1_000
-                        ? `${m / 1_000}K×`
-                        : `${m}×`}
-                  </button>
-                ))}
-              </div>
-            </Field>
+                    <input
+                      value={devBuy}
+                      onChange={(e) => setDevBuy(e.target.value)}
+                      placeholder="0.00"
+                      inputMode="decimal"
+                      className="tabular w-full bg-transparent px-3 py-2.5 text-lg font-bold outline-none placeholder:text-faint"
+                    />
+                    <span className="tabular px-2 text-sm text-muted">USDC</span>
+                    <button
+                      type="button"
+                      onClick={() => setDevBuy(usdcFloat > 0 ? usdcFloat.toString() : "")}
+                      className="mr-2 border-2 border-lime px-2 py-0.5 text-xs font-bold text-lime hover:bg-lime hover:text-void"
+                    >
+                      {t("curve.max")}
+                    </button>
+                  </div>
+                </Field>
+                {devBuyGraduates ? (
+                  <p className="border-2 border-cyan p-2 text-xs text-cyan">{t("curve.devBuy.graduates")}</p>
+                ) : null}
 
+                <button
+                  type="button"
+                  onClick={() => setAdvanced((v) => !v)}
+                  className="flex w-full items-center justify-between border-t-2 border-line pt-4 text-left"
+                >
+                  <span className="text-sm font-bold">{t("curve.advanced")}</span>
+                  <span className="text-muted">{advanced ? "▴" : "▾"}</span>
+                </button>
+
+                {advanced ? (
+                  <div className="space-y-5">
+                    <div>
+                      <span className="eyebrow mb-1.5 block">{t("curve.holders.t")}</span>
+                      <button
+                        type="button"
+                        onClick={() => setCurveHolders((v) => !v)}
+                        className="flex items-center gap-3 text-sm"
+                      >
+                        <span
+                          className={cx(
+                            "relative inline-block h-5 w-10 border-2 transition-colors",
+                            curveHolders ? "border-lime bg-lime" : "border-line bg-void",
+                          )}
+                        >
+                          <span
+                            className={cx(
+                              "absolute top-0.5 size-3",
+                              curveHolders ? "right-0.5 bg-void" : "left-0.5 bg-muted",
+                            )}
+                          />
+                        </span>
+                        {curveHolders ? t("curve.holders.on") : t("curve.holders.off")}
+                      </button>
+                      <span className="mt-1.5 block text-xs text-muted">{t("curve.holders.b")}</span>
+                    </div>
+
+                    <Field label={t("curve.wallet")} hint={t("curve.wallet.hint")}>
+                      <input
+                        value={curveWallet}
+                        onChange={(e) => setCurveWallet(e.target.value)}
+                        placeholder={address ?? "0x…"}
+                        className={cx(inputCx(curveWalletValid), "tabular")}
+                      />
+                    </Field>
+
+                    <Field
+                      label={t("curve.exempt")}
+                      optional
+                      hint={t("curve.exempt.hint", { n: curveConfig?.maxSnipeExempt ?? 16 })}
+                    >
+                      <div className="flex gap-2">
+                        <input
+                          value={exemptDraft}
+                          onChange={(e) => setExemptDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addExempt();
+                            }
+                          }}
+                          placeholder={t("curve.exempt.ph")}
+                          className={cx(inputCx(exemptDraft === "" || isAddress(exemptDraft.trim())), "tabular")}
+                        />
+                        <button
+                          type="button"
+                          onClick={addExempt}
+                          disabled={exemptFull || !isAddress(exemptDraft.trim())}
+                          className="border-2 border-line px-3 text-lg text-muted hover:border-lime hover:text-lime disabled:opacity-40"
+                        >
+                          +
+                        </button>
+                      </div>
+                      {exempt.length > 0 ? (
+                        <ul className="mt-2 space-y-1">
+                          {exempt.map((a) => (
+                            <li key={a} className="tabular flex items-center justify-between text-xs text-muted">
+                              <span>{a}</span>
+                              <button
+                                type="button"
+                                onClick={() => setExempt(exempt.filter((x) => x !== a))}
+                                className="px-2 text-pink"
+                              >
+                                ×
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </Field>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
             <div>
               <span className="eyebrow mb-1.5 block">{t("field.fees")}</span>
               <div className="space-y-2">
@@ -491,78 +800,100 @@ export default function CreatePage() {
                 )}
               />
             </Field>
+              </>
+            )}
           </div>
         </Card>
 
         {/* ---------------- preview ---------------- */}
         <div className="space-y-4 lg:sticky lg:top-24">
+          {onCurve ? (
+            <Card className="p-5">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="eyebrow">{t("preview.title")}</p>
+                <Badge tone="cyan">{t("curve.badge")}</Badge>
+              </div>
+              <p className="text-2xl font-bold">{name.trim() || t("curve.pv.name")}</p>
+              <p className="tabular text-sm text-muted">
+                {symbol.trim() ? `$${symbol.trim().toUpperCase()}` : t("curve.pv.ticker")}
+              </p>
+              <dl className="mt-4 divide-y-2 divide-line border-t-2 border-line">
+                <Row
+                  k={t("curve.pv.launchFee")}
+                  v={
+                    curveConfig && curveConfig.launchFee > 0n
+                      ? formatUsd(formatUnitsFloat(curveConfig.launchFee, USDC_DECIMALS), { compact: false })
+                      : t("curve.pv.free")
+                  }
+                />
+                <Row k={t("curve.pv.paired")} v="USDC" />
+                <Row
+                  k={t("curve.pv.tradeFee")}
+                  v={t("curve.pv.tradeFee.v", { total: pct(totalFeeBps), yours: pct(yoursBps) })}
+                />
+                <Row k={t("fees.split")} v={splitLabel} />
+                <Row k={t("curve.pv.window")} v={t("curve.pv.window.v")} />
+                <Row k={t("curve.pv.opens")} v={curveConfig ? formatUsd(openingMarketCapUsd(curveConfig)) : "…"} />
+                <Row
+                  k={t("curve.pv.graduation")}
+                  v={t("curve.pv.graduation.v", {
+                    goal: formatUsd(goalUsd, { compact: false }),
+                    mcap: curveConfig ? formatUsd(graduationMarketCapUsd(curveConfig)) : "…",
+                  })}
+                />
+                <Row k={t("curve.pv.pool")} v="Uniswap V3 · 1% fee" />
+                <Row k={t("curve.pv.liquidity")} v={t("curve.pv.liquidity.v")} />
+              </dl>
+              <p className="mt-4 border-t-2 border-line pt-4 text-xs leading-relaxed text-muted">
+                {t("curve.pv.explain", { goal: formatUsd(goalUsd, { compact: false }) })}
+              </p>
+            </Card>
+          ) : (
           <Card className="p-5">
             <div className="mb-4 flex items-center justify-between">
               <p className="eyebrow">{t("preview.title")}</p>
-              <Badge tone="cyan">Uniswap V3 · 1% fee</Badge>
+              <Badge tone="cyan">{t("preview.badge.direct")}</Badge>
             </div>
-
-            <CurvePreview
-              startTick={tickLower}
-              endTick={tickUpper}
-              startMcap={startActual}
-              ceilingMcap={ceilingActual}
-              capacityUsd={capacity}
-            />
-
-            <div className="mt-5 grid grid-cols-2 gap-4 border-t-2 border-line pt-4">
-              <Stat label={t("preview.opensAt")} value={formatUsd(startActual)} accent="lime" />
-              <Stat label={t("preview.ceiling")} value={formatUsd(ceilingActual)} accent="cyan" />
-              <Stat
-                label={t("preview.openingPrice")}
-                value={formatTokenPrice(openPrice)}
-                sub={t("preview.supply", { n: supply.toLocaleString() })}
+            <p className="text-2xl font-bold">{name.trim() || t("curve.pv.name")}</p>
+            <p className="tabular text-sm text-muted">
+              {symbol.trim() ? `$${symbol.trim().toUpperCase()}` : t("curve.pv.ticker")}
+            </p>
+            <dl className="mt-4 divide-y-2 divide-line border-t-2 border-line">
+              <Row k={t("curve.pv.launchFee")} v={t("curve.pv.free")} />
+              <Row k={t("curve.pv.paired")} v="USDC" />
+              <Row k={t("curve.pv.tradeFee")} v="1%" />
+              <Row k={t("fees.split")} v={splitLabel} />
+              <Row k={t("preview.opensAt")} v={formatUsd(startActual)} />
+              <Row k={t("preview.ceiling")} v={formatUsd(ceilingActual)} />
+              <Row k={t("curve.pv.liquidity")} v={t("curve.pv.liquidity.v")} />
+              <Row
+                k={t("preview.feesTo")}
+                v={
+                  feeMode === "creator"
+                    ? t("preview.badge.creator")
+                    : feeMode === "holders"
+                      ? t("preview.badge.holders")
+                      : feeMode === "burn"
+                        ? t("preview.badge.burn")
+                        : (beneficiaryLink(fundsLabel)?.text ?? t("preview.badge.funds.fallback"))
+                }
               />
-              <Stat
-                label={t("preview.fillsCurve")}
-                value={formatUsd(capacity)}
-                sub={t("preview.fillsCurve.sub")}
-              />
-            </div>
-
-            <div className="mt-4 flex items-start gap-2 border-t-2 border-line pt-4">
-              <Badge tone={feeMode === "creator" ? "line" : "lime"}>
-                {feeMode === "creator"
-                  ? t("preview.badge.creator")
-                  : feeMode === "holders"
-                    ? t("preview.badge.holders")
-                    : feeMode === "burn"
-                      ? t("preview.badge.burn")
-                      : t("preview.badge.funds")}
-              </Badge>
-              <span className="text-xs leading-relaxed text-muted">
-                {feeMode === "creator"
-                  ? t("preview.badge.creator.b")
-                  : feeMode === "holders"
-                    ? t("preview.badge.holders.b")
-                    : feeMode === "burn"
-                      ? t("preview.badge.burn.b")
-                      : t("preview.badge.funds.b", {
-                        target:
-                          beneficiaryLink(fundsLabel)?.text ??
-                          t("preview.badge.funds.fallback"),
-                      })}
-              </span>
-            </div>
-
+            </dl>
             <p className="mt-4 border-t-2 border-line pt-4 text-xs leading-relaxed text-muted">
-              {t("preview.explain", {
-                amount: formatUsd(capacity),
-                start: formatUsd(startActual),
-              })}
+              {t("preview.explain.short", { start: formatUsd(startActual) })}
             </p>
           </Card>
+          )}
 
           <Card className="p-5">
             <p className="eyebrow mb-3">{t("cost.title")}</p>
             <div className="flex items-baseline gap-2">
-              <span className="tabular text-3xl font-bold text-lime">$0</span>
-              <span className="text-sm text-muted">{t("cost.gas")}</span>
+              <span className="tabular text-3xl font-bold text-lime">
+                {onCurve && devBuyWei > 0n ? formatUsd(Number(devBuy), { compact: false }) : "$0"}
+              </span>
+              <span className="text-sm text-muted">
+                {onCurve && devBuyWei > 0n ? t("cost.devBuy") : t("cost.gas")}
+              </span>
             </div>
             <p className="mt-2 text-xs text-muted">
               {t("cost.body")}
@@ -587,7 +918,7 @@ export default function CreatePage() {
             disabled={!canSubmit}
             onClick={handleLaunch}
           >
-            {!isDeployed
+            {!(onCurve ? isCurveDeployed : isDeployed)
               ? t("cta.notDeployed")
               : !isConnected
                 ? t("cta.connect")
@@ -635,6 +966,15 @@ function Field({
       {children}
       {hint ? <span className="mt-1.5 block text-xs text-muted">{hint}</span> : null}
     </label>
+  );
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-2.5 text-sm">
+      <dt className="text-muted">{k}</dt>
+      <dd className="tabular text-right font-bold">{v}</dd>
+    </div>
   );
 }
 

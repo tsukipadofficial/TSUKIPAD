@@ -8,10 +8,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { wagmiConfig } from "@/lib/wagmi";
 import { chain, PRIVY_APP_ID, WALLETCONNECT_PROJECT_ID } from "@/lib/config";
 import { I18nProvider } from "@/lib/i18n";
+import { useTheme } from "@/lib/useTheme";
 import { EnsureEmbeddedWallet } from "@/components/EnsureWallet";
 import { ReferralCapture } from "@/components/ReferralCapture";
 
 export function Providers({ children }: { children: ReactNode }) {
+  const theme = useTheme();
+
   // One client per mount, so SSR and client never share cache instances.
   const [queryClient] = useState(
     () =>
@@ -47,8 +50,10 @@ export function Providers({ children }: { children: ReactNode }) {
         // 'twitter' is X. Order here is the order shown in the modal.
         loginMethods: ["email", "google", "twitter", "github", "discord", "wallet"],
         appearance: {
-          theme: "dark",
-          accentColor: "#c8ff2e", // --color-lime
+          // Privy draws its own modal, so it has to be told the ground; left on
+          // "dark" it opens a black sheet over a paper page.
+          theme,
+          accentColor: theme === "light" ? "#557700" : "#c8ff2e", // --color-lime
           walletChainType: "ethereum-only",
           showWalletLoginFirst: false,
         },

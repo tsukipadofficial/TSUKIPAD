@@ -13,27 +13,47 @@ import { erc20Abi } from "@/lib/abi";
 import { USDC_ADDRESS, USDC_DECIMALS, chain, FAUCET_URL } from "@/lib/config";
 import { formatUnitsFloat, shortAddress } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
-import { SITE_OPEN } from "@/lib/gate";
+import { setTheme } from "@/lib/theme";
+import { useTheme } from "@/lib/useTheme";
 
 const NAV = [
   { href: "/", key: "nav.board" as const },
   { href: "/create", key: "nav.launch" as const },
-  { href: "/waitlist", key: "nav.waitlist" as const },
   { href: "/leaderboard", key: "nav.leaderboard" as const },
   { href: "/referrals", key: "nav.referrals" as const },
 ];
 
-/// While the site is closed, every destination but the waitlist is behind the
-/// gate. Linking to them anyway would just bounce people back here, so the nav
-/// shows what is actually reachable.
-const VISIBLE_NAV = SITE_OPEN ? NAV : NAV.filter((n) => n.href === "/waitlist");
+/// Drawn on the same 16×16 grid as the logo mark, square caps, so the switch
+/// sits in the neo-brutalist system rather than looking like a borrowed icon set.
+function SunIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" className="block" aria-hidden focusable="false">
+      <rect x="6" y="6" width="4" height="4" fill="currentColor" />
+      <g fill="currentColor">
+        <rect x="7" y="0" width="2" height="3" />
+        <rect x="7" y="13" width="2" height="3" />
+        <rect x="0" y="7" width="3" height="2" />
+        <rect x="13" y="7" width="3" height="2" />
+      </g>
+    </svg>
+  );
+}
 
-/// The wordmark goes somewhere that exists in both states.
-const HOME = SITE_OPEN ? "/" : "/waitlist";
+function MoonIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" className="block" aria-hidden focusable="false">
+      <path
+        d="M13 10.5A6 6 0 0 1 5.5 3 6 6 0 1 0 13 10.5Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
 
 export function Header() {
   const pathname = usePathname();
   const { t, lang, setLang } = useI18n();
+  const theme = useTheme();
   const { address, chainId } = useAccount();
   // Privy owns sign-in now: email, Google, X, GitHub, Discord or an external
   // wallet, all funnelled into one modal.
@@ -72,12 +92,12 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b-2 border-line bg-void/85 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-5 py-3">
-        <Link href={HOME} className="group shrink-0">
+        <Link href="/" className="group shrink-0">
           <Logo name={NAME_HEAD} accent={NAME_TAIL} size={34} />
         </Link>
 
         <nav className="ml-4 hidden items-center gap-1 sm:flex">
-          {VISIBLE_NAV.map((item) => {
+          {NAV.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
@@ -112,6 +132,26 @@ export function Header() {
                 aria-pressed={lang === l}
               >
                 {l === "en" ? "EN" : "日本語"}
+              </button>
+            ))}
+          </div>
+
+          {/* Ground switch, built like the language switch beside it: two
+              states, both visible, the current one filled. */}
+          <div className="flex border-2 border-line">
+            {(["dark", "light"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setTheme(mode)}
+                className={cx(
+                  "px-2 py-1 transition-colors",
+                  theme === mode ? "bg-lime text-void" : "text-muted hover:text-ink",
+                )}
+                aria-label={t(mode === "dark" ? "nav.dark" : "nav.light")}
+                title={t(mode === "dark" ? "nav.dark" : "nav.light")}
+                aria-pressed={theme === mode}
+              >
+                {mode === "dark" ? <MoonIcon /> : <SunIcon />}
               </button>
             ))}
           </div>

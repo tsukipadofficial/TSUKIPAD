@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 
 import { Badge, Button, Card, cx } from "./ui";
-import { launchTokenAbi, launchpadAbi } from "@/lib/abi";
-import { LAUNCHPAD_ADDRESS, USDC_DECIMALS, chain } from "@/lib/config";
+import { curveAbi, launchTokenAbi, launchpadAbi } from "@/lib/abi";
+import { CURVE_ADDRESS, LAUNCHPAD_ADDRESS, USDC_DECIMALS, chain } from "@/lib/config";
 import { formatUsd, formatUnitsFloat } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 import type { LaunchView } from "@/lib/hooks";
@@ -80,12 +80,22 @@ export function RewardsPanel({ launch }: { launch: LaunchView }) {
   async function handleSync() {
     setBusy(true);
     try {
-      const hash = await writeContractAsync({
-        address: LAUNCHPAD_ADDRESS,
-        abi: launchpadAbi,
-        functionName: "collectFees",
-        args: [launch.token],
-      });
+      // A curve launch accrues its holders' share on the curve contract, and
+      // paying it out is what funds the token's reward pool.
+      const hash =
+        launch.kind === "curve"
+          ? await writeContractAsync({
+              address: CURVE_ADDRESS,
+              abi: curveAbi,
+              functionName: "claimCreatorFees",
+              args: [launch.token],
+            })
+          : await writeContractAsync({
+              address: LAUNCHPAD_ADDRESS,
+              abi: launchpadAbi,
+              functionName: "collectFees",
+              args: [launch.token],
+            });
       await publicClient?.waitForTransactionReceipt({ hash });
       await refetchPending();
     } catch {

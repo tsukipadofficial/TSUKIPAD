@@ -2,11 +2,14 @@
 
 import { useMemo } from "react";
 import { useReadContract, useReadContracts } from "wagmi";
-import type { Address } from "viem";
+import type { Address, Hex } from "viem";
 
-import { launchpadAbi, launchTokenAbi, uniswapV3PoolAbi } from "./abi";
-import { LAUNCHPAD_ADDRESS, TOKEN_DECIMALS, isDeployed } from "./config";
+import { launchpadAbi, launchTokenAbi, stateViewAbi } from "./abi";
+import { poolIdFor } from "./v4";
+import { LAUNCHPAD_ADDRESS, STATE_VIEW_ADDRESS, TOKEN_DECIMALS, isDeployed } from "./config";
+import type { CurveState } from "./curve";
 import {
+  tickToHumanPrice,
   marketCapFromSqrtPriceX96,
   marketCapAtTick,
   curveCapacityUsd,
@@ -16,7 +19,7 @@ import {
 
 export type RawLaunch = {
   token: Address;
-  pool: Address;
+  pool: Hex;
   creator: Address;
   feeRecipient: Address;
   tickLower: number;
@@ -24,14 +27,18 @@ export type RawLaunch = {
   liquidity: bigint;
   createdAt: bigint;
   creatorAllocation: bigint;
-  unlockAt: bigint;
-  allocationClaimed: boolean;
   buybackAndBurn: boolean;
   usdcSpentOnBuybacks: bigint;
   tokensBurned: bigint;
 };
 
 export type LaunchView = RawLaunch & {
+  /// "direct" opened straight into a Uniswap pool; "curve" started on the
+  /// bonding curve and carries its state in `curve`.
+  kind: "direct" | "curve";
+  /// Dollars per whole token, whichever market the token trades in.
+  priceUsd: number;
+  curve?: CurveState;
   name: string;
   symbol: string;
   totalSupply: bigint;
@@ -75,7 +82,7 @@ export function useLaunches(limit = 30) {
   const detailCalls = useMemo(
     () =>
       raw.flatMap((l) => [
-        { address: l.pool, abi: uniswapV3PoolAbi, functionName: "slot0" } as const,
+        { address: STATE_VIEW_ADDRESS, abi: stateViewAbi, functionName: "getSlot0", args: [poolIdFor(l.token)] } as const,
         { address: l.token, abi: launchTokenAbi, functionName: "name" } as const,
         { address: l.token, abi: launchTokenAbi, functionName: "symbol" } as const,
         { address: l.token, abi: launchTokenAbi, functionName: "totalSupply" } as const,
@@ -96,9 +103,8 @@ export function useLaunches(limit = 30) {
     return raw
       .map((l, i) => {
         const base = i * 7;
-        const slot0 = details.data[base]?.result as
-          | readonly [bigint, number, number, number, number, number, boolean]
-          | undefined;
+        // v4's getSlot0: (sqrtPriceX96, tick, protocolFee, lpFee)
+        const slot0 = details.data[base]?.result as readonly [bigint, number, number, number] | undefined;
         const name = details.data[base + 1]?.result as string | undefined;
         const symbol = details.data[base + 2]?.result as string | undefined;
         const totalSupply = details.data[base + 3]?.result as bigint | undefined;
@@ -148,7 +154,7 @@ export function useLaunch(token: Address | undefined) {
   const details = useReadContracts({
     contracts: l
       ? [
-          { address: l.pool, abi: uniswapV3PoolAbi, functionName: "slot0" } as const,
+          { address: STATE_VIEW_ADDRESS, abi: stateViewAbi, functionName: "getSlot0", args: [poolIdFor(l.token)] } as const,
           { address: l.token, abi: launchTokenAbi, functionName: "name" } as const,
           { address: l.token, abi: launchTokenAbi, functionName: "symbol" } as const,
           { address: l.token, abi: launchTokenAbi, functionName: "totalSupply" } as const,
@@ -162,9 +168,7 @@ export function useLaunch(token: Address | undefined) {
 
   const launch = useMemo<LaunchView | null>(() => {
     if (!l || !details.data) return null;
-    const slot0 = details.data[0]?.result as
-      | readonly [bigint, number, number, number, number, number, boolean]
-      | undefined;
+    const slot0 = details.data[0]?.result as readonly [bigint, number, number, number] | undefined;
     const name = details.data[1]?.result as string | undefined;
     const symbol = details.data[2]?.result as string | undefined;
     const totalSupply = details.data[3]?.result as bigint | undefined;
@@ -228,6 +232,8 @@ function buildLaunchView(
 
   return {
     ...l,
+    kind: "direct",
+    priceUsd: tickToHumanPrice(extra.currentTick),
     tickLower,
     tickUpper,
     name: extra.name,

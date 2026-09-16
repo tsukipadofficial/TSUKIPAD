@@ -27,7 +27,7 @@ const money = (n: number) => `${n >= 0 ? "+" : "-"}${formatUsd(Math.abs(n))}`;
 const tone = (n: number) => (n > 0 ? "text-lime" : n < 0 ? "text-pink" : "text-muted");
 
 /// Rank 1-3 are the only ones worth colouring; past that a medal is noise.
-const MEDAL = ["text-amber", "text-ink", "text-[#c88b4a]"];
+const MEDAL = ["text-amber", "text-ink", "text-bronze"];
 
 function name(r: { display: string | null; handle: string | null; wallet: string }) {
   return r.display ?? (r.handle ? `@${r.handle}` : shortAddress(r.wallet));

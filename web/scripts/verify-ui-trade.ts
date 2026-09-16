@@ -7,6 +7,7 @@
 ///
 ///   pnpm exec tsx scripts/verify-ui-trade.ts
 
+import { poolKeyFor as poolKey } from "../lib/v4";
 import { createPublicClient, createWalletClient, http, formatUnits } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { arcTestnet } from "viem/chains";
@@ -40,13 +41,12 @@ async function main() {
     functionName: "exactInputSingle",
     args: [
       {
-        tokenIn: USDC,
-        tokenOut: TOKEN,
-        fee: POOL_FEE,
-        recipient: account.address,
-        deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
+        key: poolKey(TOKEN),
+        zeroForOne: false,
         amountIn,
         amountOutMinimum: 0n,
+        recipient: account.address,
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
       },
     ],
     account: account.address,
@@ -70,13 +70,12 @@ async function main() {
     functionName: "exactInputSingle",
     args: [
       {
-        tokenIn: USDC,
-        tokenOut: TOKEN,
-        fee: POOL_FEE,
-        recipient: account.address,
-        deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
+        key: poolKey(TOKEN),
+        zeroForOne: false,
         amountIn,
         amountOutMinimum: minOut,
+        recipient: account.address,
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
       },
     ],
   });

@@ -2,6 +2,7 @@
 /// Paced deliberately -- the public RPC answers bursts with
 /// "Request exceeds defined limit", which is a rate limit wearing a confusing name.
 
+import { poolKeyFor as poolKey } from "../lib/v4";
 import { createPublicClient, createWalletClient, http, parseUnits, formatUnits } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { arcTestnet } from "viem/chains";
@@ -60,8 +61,14 @@ async function main() {
     pub.waitForTransactionReceipt({
       hash: await wallet.writeContract({
         address: ROUTER, abi: swapRouterAbi, functionName: "exactInputSingle",
-        args: [{ tokenIn: USDC, tokenOut: TOKEN, fee: 10_000, recipient: account.address,
-          deadline: BigInt(Math.floor(Date.now() / 1000) + 900), amountIn: spend, amountOutMinimum: 0n }],
+        args: [{
+        key: poolKey(TOKEN),
+        zeroForOne: false,
+        amountIn: spend,
+        amountOutMinimum: 0n,
+        recipient: account.address,
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
+      }],
       }),
     }));
   await sleep(3000);
@@ -80,8 +87,14 @@ async function main() {
     pub.waitForTransactionReceipt({
       hash: await wallet.writeContract({
         address: ROUTER, abi: swapRouterAbi, functionName: "exactInputSingle",
-        args: [{ tokenIn: TOKEN, tokenOut: USDC, fee: 10_000, recipient: account.address,
-          deadline: BigInt(Math.floor(Date.now() / 1000) + 900), amountIn: bought, amountOutMinimum: 0n }],
+        args: [{
+        key: poolKey(TOKEN),
+        zeroForOne: true,
+        amountIn: bought,
+        amountOutMinimum: 0n,
+        recipient: account.address,
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
+      }],
       }),
     }));
   console.log("sold it back — fees accrued on both sides\n");

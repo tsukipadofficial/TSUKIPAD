@@ -5,12 +5,29 @@ import { useMemo, useState } from "react";
 
 import { LaunchCard } from "@/components/LaunchCard";
 import { Badge, Button, Card, LiveDot, Skeleton, cx } from "@/components/ui";
-import { useLaunches } from "@/lib/hooks";
-import { isDeployed, EXPLORER_URL } from "@/lib/config";
+import { useLaunches, type LaunchView } from "@/lib/hooks";
+import { useCurveLaunches } from "@/lib/curve";
+import { isDeployed, isCurveDeployed, EXPLORER_URL } from "@/lib/config";
 import { formatUsd } from "@/lib/format";
 import { useT } from "@/lib/i18n";
 
 type Sort = "new" | "mcap" | "climbing";
+
+type Filter = "all" | "curve" | "graduated" | "direct";
+
+const FILTERS = [
+  { id: "all" as const, key: "board.filter.all" as const },
+  { id: "curve" as const, key: "board.filter.curve" as const },
+  { id: "graduated" as const, key: "board.filter.graduated" as const },
+  { id: "direct" as const, key: "board.filter.direct" as const },
+];
+
+function matchesFilter(l: LaunchView, f: Filter): boolean {
+  if (f === "all") return true;
+  if (f === "direct") return l.kind === "direct";
+  if (f === "curve") return l.kind === "curve" && !l.curve?.graduated;
+  return l.kind === "curve" && !!l.curve?.graduated;
+}
 
 const SORTS = [
   { id: "new" as const, key: "board.sort.new" as const },
@@ -20,20 +37,31 @@ const SORTS = [
 
 export default function BoardPage() {
   const t = useT();
-  const { launches, isLoading, error } = useLaunches();
+  const direct = useLaunches();
+  const curves = useCurveLaunches();
+  // Either registry alone is a working board. Only fail when neither answers.
+  const launches = useMemo(
+    () => [...direct.launches, ...curves.launches],
+    [direct.launches, curves.launches],
+  );
+  const isLoading = direct.isLoading || curves.isLoading;
+  const directDown = !isDeployed || !!direct.error;
+  const curvesDown = !isCurveDeployed || !!curves.error;
+  const error = directDown && curvesDown ? (direct.error ?? curves.error) : null;
   const [sort, setSort] = useState<Sort>("new");
+  const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = q
-      ? launches.filter(
-          (l) =>
-            l.name.toLowerCase().includes(q) ||
-            l.symbol.toLowerCase().includes(q) ||
-            l.token.toLowerCase().includes(q),
-        )
-      : launches;
+    const filtered = launches.filter(
+      (l) =>
+        matchesFilter(l, filter) &&
+        (!q ||
+          l.name.toLowerCase().includes(q) ||
+          l.symbol.toLowerCase().includes(q) ||
+          l.token.toLowerCase().includes(q)),
+    );
 
     const sorted = [...filtered];
     if (sort === "new") sorted.sort((a, b) => Number(b.createdAt - a.createdAt));
@@ -45,7 +73,7 @@ export default function BoardPage() {
       );
     }
     return sorted;
-  }, [launches, sort, query]);
+  }, [launches, sort, query, filter]);
 
   const totalCap = launches.reduce((sum, l) => sum + l.marketCapUsd, 0);
 
@@ -74,6 +102,23 @@ export default function BoardPage() {
             ))}
           </div>
 
+          <div className="flex items-center gap-1.5">
+            {FILTERS.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setFilter(f.id)}
+                className={cx(
+                  "border-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-colors",
+                  filter === f.id
+                    ? "border-cyan bg-cyan text-void"
+                    : "border-line text-muted hover:border-line-bright hover:text-ink",
+                )}
+              >
+                {t(f.key)}
+              </button>
+            ))}
+          </div>
+
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -82,7 +127,7 @@ export default function BoardPage() {
           />
         </div>
 
-        {!isDeployed ? (
+        {!isDeployed && !isCurveDeployed ? (
           <NotDeployed />
         ) : error ? (
           <Card className="p-8 text-center">

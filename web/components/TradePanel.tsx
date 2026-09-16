@@ -1,5 +1,6 @@
 "use client";
 
+import { poolKeyFor } from "@/lib/v4";
 import { useEffect, useMemo, useState } from "react";
 import { formatUnits, parseUnits, maxUint256, type Address } from "viem";
 import {
@@ -101,13 +102,12 @@ export function TradePanel({ launch }: { launch: LaunchView }) {
           functionName: "exactInputSingle",
           args: [
             {
-              tokenIn,
-              tokenOut,
-              fee: POOL_FEE,
-              recipient: address ?? "0x000000000000000000000000000000000000dEaD",
-              deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
+              key: poolKeyFor(launch.token),
+              zeroForOne: tokenIn !== USDC_ADDRESS,
               amountIn,
               amountOutMinimum: 0n,
+              recipient: address ?? "0x000000000000000000000000000000000000dEaD",
+              deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
             },
           ],
           account: address ?? "0x000000000000000000000000000000000000dEaD",
@@ -171,13 +171,14 @@ export function TradePanel({ launch }: { launch: LaunchView }) {
         functionName: "exactInputSingle",
         args: [
           {
-            tokenIn,
-            tokenOut,
-            fee: POOL_FEE,
-            recipient: address,
-            deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
+            key: poolKeyFor(launch.token),
+            // The launch token is always currency0, so selling it is "zero for
+            // one" and buying it is the other way round.
+            zeroForOne: tokenIn !== USDC_ADDRESS,
             amountIn,
             amountOutMinimum: minOut,
+            recipient: address,
+            deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
           },
         ],
       });

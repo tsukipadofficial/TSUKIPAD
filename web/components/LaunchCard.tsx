@@ -4,7 +4,6 @@ import Link from "next/link";
 import type { LaunchView } from "@/lib/hooks";
 import { Badge, Card, CurveBar, cx } from "./ui";
 import { formatUsd, formatTokenPrice, timeAgo, shortAddress } from "@/lib/format";
-import { tickToHumanPrice } from "@/lib/launch-math";
 import { decodeMetadata, safeImageUrl } from "@/lib/metadata";
 import { useMemo } from "react";
 import { useI18n } from "@/lib/i18n";
@@ -26,7 +25,9 @@ export function TokenMark({
   const hueB = (hueA + 60 + (seed % 120)) % 360;
   return (
     <div
-      className="flex shrink-0 items-center justify-center border-2 border-void font-mono font-bold text-void"
+      // The tile is a bright generated gradient in either theme, so its rule and
+      // its label stay ink rather than following the ground.
+      className="flex shrink-0 items-center justify-center border-2 border-stamp font-mono font-bold text-stamp"
       style={{
         width: size,
         height: size,
@@ -51,7 +52,8 @@ export function LaunchCard({ launch }: { launch: LaunchView }) {
 
   const multiple = launch.marketCapUsd / launch.startMarketCapUsd;
   const isUp = multiple > 1.01;
-  const soldOut = launch.curveProgress >= 0.999;
+  const curve = launch.curve;
+  const soldOut = !curve && launch.curveProgress >= 0.999;
   const fresh = Date.now() / 1000 - Number(launch.createdAt) < 900; // 15 min
 
   return (
@@ -63,7 +65,7 @@ export function LaunchCard({ launch }: { launch: LaunchView }) {
             <img
               src={image}
               alt=""
-              className="size-12 shrink-0 border-2 border-void object-cover"
+              className="size-12 shrink-0 border-2 border-stamp object-cover"
             />
           ) : (
             <TokenMark address={launch.token} symbol={launch.symbol} />
@@ -76,9 +78,10 @@ export function LaunchCard({ launch }: { launch: LaunchView }) {
               </h3>
               {fresh ? <Badge tone="lime">{t("card.new")}</Badge> : null}
               {soldOut ? <Badge tone="pink">{t("card.soldOut")}</Badge> : null}
+              {curve?.graduated ? <Badge tone="cyan">{t("card.graduated")}</Badge> : null}
               {launch.rewardsEnabled ? <Badge tone="cyan">{t("card.earns")}</Badge> : null}
               {launch.buybackAndBurn ? <Badge tone="pink">{t("card.burns")}</Badge> : null}
-              {launch.feeRecipient.toLowerCase() !== launch.creator.toLowerCase() ? (
+              {!curve && launch.feeRecipient.toLowerCase() !== launch.creator.toLowerCase() ? (
                 <Badge tone="pink">{t("card.funds")}</Badge>
               ) : null}
             </div>
@@ -106,22 +109,32 @@ export function LaunchCard({ launch }: { launch: LaunchView }) {
           <CurveBar progress={launch.curveProgress} />
           <div className="flex items-center justify-between text-[0.6875rem] text-faint">
             <span className="tabular">
-              {formatTokenPrice(tickToHumanPrice(launch.currentTick))}
+              {formatTokenPrice(launch.priceUsd)}
             </span>
             {/* Label the bar with the same quantity the bar encodes — supply
                 sold. Dollars-remaining lives on the detail page, where there is
                 room to explain why the two diverge. */}
             <span className="tabular">
-              {soldOut
-                ? t("card.soldOut")
-                : t("card.supplySold", { pct: formatProgress(launch.curveProgress) })}
+              {curve
+                ? curve.graduated
+                  ? t("card.graduated")
+                  : t("card.toGraduation", { pct: formatProgress(launch.curveProgress) })
+                : soldOut
+                  ? t("card.soldOut")
+                  : t("card.supplySold", { pct: formatProgress(launch.curveProgress) })}
             </span>
           </div>
         </div>
 
         <div className="mt-3 flex items-center justify-between border-t-2 border-line pt-3 text-[0.6875rem] text-faint">
           <span className="tabular">{t("card.by", { addr: shortAddress(launch.creator) })}</span>
-          <span className="tabular">{t("card.ceiling", { amount: formatUsd(launch.ceilingMarketCapUsd) })}</span>
+          <span className="tabular">
+            {curve
+              ? curve.graduated
+                ? "Uniswap V3"
+                : t("card.graduatesAt", { amount: formatUsd(launch.ceilingMarketCapUsd) })
+              : t("card.ceiling", { amount: formatUsd(launch.ceilingMarketCapUsd) })}
+          </span>
         </div>
       </Card>
     </Link>

@@ -31,27 +31,31 @@ const POLL_MS = 6_000;
 ///      Polling a JSON route also avoids `eth_newFilter`, which Arc answers with
 ///      "internal error" -- the reason wagmi's `useWatchContractEvent` never
 ///      produced a single trade here.
-export function useTrades(pool: Address | undefined) {
+export function useTrades(pool: Address | undefined, curveToken?: Address) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Clearing the tape when the pool changes is done during render rather than in
   // an effect. An effect would paint one frame of the previous token's trades
   // under the new token's name before the reset landed.
-  const [seenPool, setSeenPool] = useState(pool);
-  if (pool !== seenPool) {
-    setSeenPool(pool);
+  const key = `${pool ?? ""}:${curveToken ?? ""}`;
+  const [seenKey, setSeenKey] = useState(key);
+  if (key !== seenKey) {
+    setSeenKey(key);
     setTrades([]);
     setIsLoading(true);
   }
 
   useEffect(() => {
-    if (!pool) return;
+    if (!pool && !curveToken) return;
     let cancelled = false;
+    const query = new URLSearchParams();
+    if (pool) query.set("pool", pool);
+    if (curveToken) query.set("token", curveToken);
 
     async function scan() {
       try {
-        const res = await fetch(`/api/trades?pool=${pool}`, { cache: "no-store" });
+        const res = await fetch(`/api/trades?${query}`, { cache: "no-store" });
         if (!res.ok) return;
         const body = (await res.json()) as { trades?: Trade[] };
         if (cancelled || !Array.isArray(body.trades)) return;
@@ -69,7 +73,7 @@ export function useTrades(pool: Address | undefined) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [pool]);
+  }, [pool, curveToken]);
 
   return { trades, isLoading };
 }

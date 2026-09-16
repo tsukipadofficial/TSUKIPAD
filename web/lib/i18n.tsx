@@ -30,6 +30,8 @@ const STRINGS = {
   "nav.copied": { en: "Copied", ja: "コピーしました" },
   "nav.signOut": { en: "Sign out", ja: "サインアウト" },
   "nav.explorer": { en: "Explorer", ja: "エクスプローラ" },
+  "nav.dark": { en: "Dark", ja: "ダーク" },
+  "nav.light": { en: "Light", ja: "ライト" },
 
   "footer.chain": { en: "Built on Arc Network · Arc Testnet · chain 5042002", ja: "Arc Network上に構築 · Arcテストネット · チェーン 5042002" },
   /// Required by the Arc Brand Guidelines and Partner Toolkit. Kept in English
@@ -54,8 +56,8 @@ const STRINGS = {
   "hero.title.3": { en: "everywhere", ja: "即座に取引" },
   "hero.title.4": { en: "instantly.", ja: "から発行。" },
   "hero.body": {
-    en: "Your token opens as a real Uniswap V3 pool paired with USDC — not a bonding curve that has to graduate later. Liquidity is seeded with single-sided supply, so you launch",
-    ja: "トークンはUSDCとペアになった本物のUniswap V3プールとして開始します。後から移行が必要なボンディングカーブではありません。片側供給で流動性を供給するため、",
+    en: "Open straight into a real Uniswap V3 pool paired with USDC, or start on a bonding curve that graduates into one at a $52K market cap. Either way you launch",
+    ja: "USDCとペアの本物のUniswap V3プールで直接開始するか、時価総額$52KでUniswapへ移行するボンディングカーブから始められます。どちらの場合も",
   },
   "hero.body.bold": { en: "without putting up a cent", ja: "自己資金ゼロで発行でき" },
   "hero.body.end": { en: ", and it is locked forever by contract.", ja: "、流動性はコントラクトにより恒久的にロックされます。" },
@@ -69,7 +71,7 @@ const STRINGS = {
   "how.3.t": { en: "Seed", ja: "供給" },
   "how.3.b": { en: "100% of supply becomes single-sided liquidity. You pay nothing.", ja: "供給量の100%が片側流動性になります。費用はかかりません。" },
   "how.4.t": { en: "Trade", ja: "取引" },
-  "how.4.b": { en: "Live on Uniswap from block one. No graduation step.", ja: "最初のブロックからUniswapで取引可能。移行作業は不要です。" },
+  "how.4.b": { en: "Live on Uniswap from block one, or start on a bonding curve that graduates into a locked pool.", ja: "最初のブロックからUniswapで取引するか、ロックされたプールへ移行するボンディングカーブから始めます。" },
 
   "stats.launches": { en: "Launches", ja: "発行数" },
   "stats.combinedCap": { en: "Combined cap", ja: "合計時価総額" },
@@ -102,8 +104,8 @@ const STRINGS = {
   // --- create form ----------------------------------------------------
   "create.title": { en: "Launch a token", ja: "トークンを発行" },
   "create.subtitle": {
-    en: "Fixed supply, no mint function, no owner keys. Your entire supply becomes single-sided Uniswap liquidity — you provide",
-    ja: "固定供給、ミント機能なし、オーナー権限なし。供給量の全てがUniswapの片側流動性になります。",
+    en: "Fixed supply, no mint function, no owner keys. Start on a bonding curve or open straight into Uniswap — either way you provide",
+    ja: "固定供給、ミント機能なし、オーナー権限なし。ボンディングカーブから始めるか、Uniswapで直接開始します。どちらも",
   },
   "create.subtitle.bold": { en: "no USDC at all", ja: "USDCの拠出は一切不要" },
   "create.subtitle.end": { en: "— and that liquidity can never be withdrawn.", ja: "で、その流動性は引き出すことができません。" },
@@ -116,6 +118,7 @@ const STRINGS = {
   "field.description.ph": { en: "What is this?", ja: "どんなトークンですか？" },
   "field.picture": { en: "Picture", ja: "画像" },
   "field.optional": { en: "optional", ja: "任意" },
+  "field.website": { en: "Website", ja: "ウェブサイト" },
   "field.telegram": { en: "Telegram", ja: "Telegram" },
 
   "image.choose": { en: "Choose an image", ja: "画像を選択" },
@@ -177,9 +180,113 @@ const STRINGS = {
   "field.allocation": { en: "Creator allocation — {pct}%", ja: "発行者の取り分 — {pct}%" },
   "field.allocation.none": { en: "Nothing withheld. The purest fair launch.", ja: "留保なし。最も公平な発行方式です。" },
   "field.allocation.some": {
-    en: "You keep {amount}M tokens — locked for 30 minutes after launch so you cannot dump on early buyers. Buyers can see this.",
-    ja: "{amount}Mトークンを留保します。初期購入者への売り抜けを防ぐため、発行後30分間ロックされます。購入者からも確認できます。",
+    en: "You keep {amount}M tokens, sent to your wallet at launch. Buyers can see this.",
+    ja: "{amount}Mトークンを留保し、発行時にウォレットへ送られます。購入者からも確認できます。",
   },
+
+  // --- bonding curve -------------------------------------------------
+  "create.type": { en: "Launch type", ja: "発行方式" },
+  "create.type.curve.t": { en: "Bonding curve", ja: "ボンディングカーブ" },
+  "create.type.curve.b": {
+    en: "Trades on a curve until {goal} is raised, then graduates into a locked Uniswap pool at a {mcap} market cap.",
+    ja: "{goal}が集まるまでカーブ上で取引され、時価総額{mcap}でロックされたUniswapプールへ移行します。",
+  },
+  "create.type.direct.t": { en: "Direct pool", ja: "ダイレクトプール" },
+  "create.type.direct.b": {
+    en: "Opens straight into a Uniswap V3 pool. Tradeable anywhere from block one.",
+    ja: "最初からUniswap V3プールで開始。最初のブロックからどこでも取引できます。",
+  },
+  "curve.devBuy": { en: "Developer buy", ja: "開発者購入" },
+  "curve.devBuy.hint": {
+    en: "{bal} USDC available. Bought in the launch transaction, free of the snipe tax.",
+    ja: "利用可能: {bal} USDC。発行トランザクション内で購入され、スナイプ税はかかりません。",
+  },
+  "curve.devBuy.graduates": {
+    en: "This buys out the whole curve: the launch graduates in the same transaction.",
+    ja: "カーブ全体を買い切るため、発行と同時に移行します。",
+  },
+  "curve.max": { en: "Max", ja: "最大" },
+  "curve.advanced": { en: "Advanced", ja: "詳細設定" },
+  "curve.holders.t": { en: "Holder fee sharing", ja: "ホルダーへの手数料分配" },
+  "curve.holders.off": { en: "Creator fees go to the creator wallet", ja: "発行者手数料は発行者ウォレットへ" },
+  "curve.holders.on": { en: "Creator fees go to holders", ja: "発行者手数料はホルダーへ" },
+  "curve.holders.b": {
+    en: "Route this launch's creator fees to its holders, split pro rata for each holder to claim.",
+    ja: "この発行の発行者手数料をホルダーへ保有量に応じて分配し、各自が受け取れるようにします。",
+  },
+  "curve.wallet": { en: "Creator wallet", ja: "発行者ウォレット" },
+  "curve.wallet.hint": {
+    en: "Receives creator fees and the creator tax. Leave blank to use your connected wallet.",
+    ja: "発行者手数料と発行者税を受け取ります。空欄なら接続中のウォレットを使います。",
+  },
+  "curve.tax": { en: "Creator tax", ja: "発行者税" },
+  "curve.tax.hint": {
+    en: "Traders pay {total} in total, {yours} of it yours. Up to {max}. The pool's hook charges it on buys and sells alike, on the curve and after graduation -- the rate never changes.",
+    ja: "取引手数料は合計{total}、うち{yours}があなたの取り分です。上限{max}。フックが買いと売りの両方に課金し、カーブ中も移行後も同じ料率です。",
+  },
+  "curve.exempt": { en: "Snipe tax exemptions", ja: "スナイプ税の免除" },
+  "curve.exempt.hint": {
+    en: "Buys in the launch second pay 99%, decaying to zero across 5s. Declare the wallets your team opens with (up to {n}).",
+    ja: "発行直後の購入は99%課税され、5秒でゼロまで減衰します。チームが最初に使うウォレットを指定できます（最大{n}件）。",
+  },
+  "curve.exempt.ph": { en: "0x wallet address", ja: "0x ウォレットアドレス" },
+  "curve.pv.launchFee": { en: "Launch fee", ja: "発行手数料" },
+  "curve.pv.free": { en: "Free", ja: "無料" },
+  "curve.pv.paired": { en: "Paired with", ja: "ペア資産" },
+  "curve.pv.tradeFee": { en: "Trade fee", ja: "取引手数料" },
+  "curve.pv.tradeFee.v": { en: "{total} · {yours} yours", ja: "{total} · うち{yours}" },
+  "curve.pv.window": { en: "Launch window", ja: "発行直後" },
+  "curve.pv.window.v": { en: "99% snipe tax, 5s", ja: "99%スナイプ税、5秒" },
+  "curve.pv.opens": { en: "Opens at", ja: "開始時価総額" },
+  "curve.pv.graduation": { en: "Graduation", ja: "移行条件" },
+  "curve.pv.graduation.v": { en: "{goal} raised · {mcap}", ja: "{goal}調達 · {mcap}" },
+  "curve.pv.pool": { en: "Then trades on", ja: "移行先" },
+  "curve.pv.liquidity": { en: "Liquidity", ja: "流動性" },
+  "curve.pv.liquidity.v": { en: "Locked forever", ja: "永久ロック" },
+  "curve.pv.explain": {
+    en: "Buyers push the price up the curve. Once {goal} has been raised the curve sells out, and that USDC plus the last 20% of supply become a Uniswap V3 pool at the same price, locked forever.",
+    ja: "購入によって価格がカーブを上昇します。{goal}が集まるとカーブは完売し、そのUSDCと残り20%の供給が同じ価格でUniswap V3プールとなり、永久にロックされます。",
+  },
+  "curve.badge": { en: "bonding curve", ja: "ボンディングカーブ" },
+  "curve.graduated": { en: "graduated", ja: "移行済" },
+  "curve.progress": { en: "Bonding curve progress", ja: "ボンディングカーブの進捗" },
+  "curve.raised": { en: "{raised} of {goal} raised", ja: "{goal}中{raised}調達" },
+  "curve.graduatesAt": { en: "Graduates at", ja: "移行時価総額" },
+  "curve.toGo": { en: "Left to graduate", ja: "移行まで残り" },
+  "curve.explain": {
+    en: "When the curve sells out, {goal} and the last 20% of supply move into a Uniswap V3 pool at the same price, and that liquidity is locked forever. Until then tokens are bought from and sold back to the curve, and cannot be sent between wallets.",
+    ja: "カーブが完売すると、{goal}と残り20%の供給が同じ価格でUniswap V3プールへ移り、その流動性は永久にロックされます。それまではカーブとの売買のみで、ウォレット間の送金はできません。",
+  },
+  "curve.graduatedExplain": {
+    en: "This launch sold out its curve and now trades in a locked Uniswap V3 pool at the 1% fee tier.",
+    ja: "この発行はカーブを完売し、現在はロックされたUniswap V3プール（手数料1%）で取引されています。",
+  },
+  "curve.fees.title": { en: "Creator fees", ja: "発行者手数料" },
+  "curve.fees.owed": { en: "waiting to be paid out", ja: "支払い待ち" },
+  "curve.fees.body": {
+    en: "Fees build up here as people trade. Anyone can trigger the payout; it only ever goes to {to}.",
+    ja: "取引のたびにここに手数料が貯まります。支払いは誰でも実行でき、送金先は常に{to}です。",
+  },
+  "curve.fees.holders": { en: "the holders", ja: "ホルダー" },
+  "curve.fees.pay": { en: "Pay out", ja: "支払う" },
+  "curve.fees.collect": { en: "Collect pool fees", ja: "プール手数料を回収" },
+  "curve.fees.working": { en: "Working…", ja: "処理中…" },
+  "facts.transfers": { en: "Transfers", ja: "送金" },
+  "facts.transfers.locked": { en: "Open at graduation", ja: "移行時に解放" },
+  "facts.transfers.open": { en: "Open", ja: "可能" },
+  "facts.fees.curve": { en: "{total} on curve trades, {yours} to {to}", ja: "カーブ取引で{total}、うち{yours}が{to}へ" },
+  "facts.graduation": { en: "Graduation", ja: "移行" },
+  "trade.fee": { en: "Fee", ja: "手数料" },
+  "trade.snipeTax": { en: "Includes a {pct} snipe tax. It falls to zero within 5 seconds of launch.", ja: "{pct}のスナイプ税を含みます。発行から5秒以内にゼロになります。" },
+  "trade.curveGraduates": { en: "This buy finishes the curve and graduates the launch. You are only charged the {used} it takes.", ja: "この購入でカーブが完売し、移行します。請求されるのは必要な{used}のみです。" },
+  "trade.onCurve": { en: "Trading on the bonding curve", ja: "ボンディングカーブで取引中" },
+  "card.graduated": { en: "graduated", ja: "移行済" },
+  "card.toGraduation": { en: "{pct} to graduation", ja: "移行まで{pct}" },
+  "card.graduatesAt": { en: "graduates at {amount}", ja: "移行 {amount}" },
+  "board.filter.all": { en: "All", ja: "すべて" },
+  "board.filter.curve": { en: "Curve", ja: "カーブ" },
+  "board.filter.graduated": { en: "Graduated", ja: "移行済" },
+  "board.filter.direct": { en: "Direct", ja: "ダイレクト" },
 
   "preview.title": { en: "Launch preview", ja: "プレビュー" },
   "preview.opensAt": { en: "Opens at", ja: "開始時価総額" },
@@ -192,6 +299,14 @@ const STRINGS = {
     en: "Roughly {amount} of net buying takes this from {start} to its ceiling, at which point every token has been sold. The ceiling mainly sets how much headroom the token has — it barely changes the early price action, so pick it for ambition, not for speed.",
     ja: "およそ{amount}の純購入で{start}から上限に到達し、その時点で全トークンが売却されます。上限は主に伸びしろを決めるもので、初期の値動きにはほとんど影響しません。速度ではなく目標の高さで選んでください。",
   },
+  "fees.split": { en: "Trading fees", ja: "取引手数料の配分" },
+  "preview.badge.direct": { en: "Uniswap V3 · 1% fee", ja: "Uniswap V3 · 手数料1%" },
+  "preview.feesTo": { en: "Fees to", ja: "手数料の行き先" },
+  "preview.explain.short": {
+    en: "Opens at {start} with every token already in the pool, and the liquidity is locked at launch. Nobody can buy in lower than you.",
+    ja: "全供給をプールに入れた状態で{start}から取引開始。流動性は発行時にロックされ、あなたより安く買える人はいません。",
+  },
+  "fees.split.v": { en: "{creator} creator / {protocol} protocol", ja: "発行者{creator} / プロトコル{protocol}" },
   "preview.badge.creator": { en: "creator fees", ja: "発行者が受取" },
   "preview.badge.holders": { en: "holder rewards", ja: "保有者に分配" },
   "preview.badge.funds": { en: "funds a project", ja: "プロジェクトに寄付" },
@@ -217,6 +332,10 @@ const STRINGS = {
   "status.mining": { en: "Mining a token address below USDC…", ja: "USDCより小さいアドレスを探索中…" },
   "status.found": { en: "Found {addr}… in {n} attempts. Confirm in your wallet.", ja: "{n}回で{addr}…を発見しました。ウォレットで承認してください。" },
   "status.launching": { en: "Launching…", ja: "発行中…" },
+  "status.approving": { en: "Approve USDC for your developer buy…", ja: "開発者購入のためUSDCを承認してください…" },
+  "curve.pv.name": { en: "Your token", ja: "あなたのトークン" },
+  "curve.pv.ticker": { en: "ticker", ja: "ティッカー" },
+  "cost.devBuy": { en: "your developer buy, + gas", ja: "開発者購入分 ＋ガス代" },
   "err.nameLength": { en: "Name must be 2–32 characters.", ja: "名称は2〜32文字で入力してください。" },
   "err.ticker": { en: "Ticker must be 2–10 characters, letters and digits only.", ja: "ティッカーは英数字2〜10文字で入力してください。" },
 
@@ -224,7 +343,6 @@ const STRINGS = {
   "token.liquidityLocked": { en: "liquidity locked", ja: "流動性ロック済" },
   "token.holdersEarn": { en: "holders earn USDC", ja: "保有者がUSDCを獲得" },
   "token.feesFund": { en: "fees fund a project", ja: "手数料をプロジェクトへ" },
-  "token.creatorLocked": { en: "creator locked", ja: "発行者分ロック中" },
   "token.launchedAgo": { en: "launched {t}", ja: "{t}に発行" },
   "token.fromLaunch": { en: "{n}× from launch", ja: "発行時比 {n}倍" },
   "curve.start": { en: "{amount} start", ja: "開始 {amount}" },
@@ -315,24 +433,6 @@ const STRINGS = {
   "rewards.buyToEarn": { en: "Buy {sym} to start earning", ja: "{sym}を購入して報酬を獲得" },
   "rewards.sweep": { en: "Sweep new fees from the pool into rewards", ja: "プールの手数料を報酬に反映する" },
 
-  // --- creator lock ---------------------------------------------------
-  "lock.title": { en: "Creator allocation", ja: "発行者の取り分" },
-  "lock.locked": { en: "locked", ja: "ロック中" },
-  "lock.released": { en: "released", ja: "解除済" },
-  "lock.unlocked": { en: "unlocked", ja: "解除可能" },
-  "lock.ofSupply": { en: "of supply · {n} {sym}", ja: "／全供給 · {n} {sym}" },
-  "lock.body": {
-    en: "Held by the launchpad contract until then. The creator cannot sell any of it, so early buyers cannot be dumped on.",
-    ja: "それまでローンチパッドのコントラクトが保管します。発行者は一切売却できないため、初期購入者が売り抜けの被害を受けることはありません。",
-  },
-  "lock.releasedBody": {
-    en: "Released to {addr} after the 30-minute lock. It trades like any other holding now.",
-    ja: "30分のロック後に{addr}へ解除されました。現在は通常の保有分と同様に取引できます。",
-  },
-  "lock.expiredBody": { en: "The lock has expired. The allocation can be released to the creator.", ja: "ロックが解除されました。発行者へ配分できます。" },
-  "lock.claim": { en: "Claim your allocation", ja: "取り分を受け取る" },
-  "lock.release": { en: "Release to creator", ja: "発行者へ配分する" },
-  "lock.releasing": { en: "Releasing…", ja: "配分中…" },
 
   // --- fee redirect ---------------------------------------------------
   "redirect.title": { en: "Where the fees go", ja: "手数料の送金先" },
@@ -346,77 +446,6 @@ const STRINGS = {
   "redirect.claimed": {
     en: "Claimed to fund {target}. Nobody can prove a social account owns a wallet — verify the address yourself before trusting the claim.",
     ja: "{target}への支援を表明しています。SNSアカウントとウォレットの所有関係は証明できないため、アドレスをご自身でご確認ください。",
-  },
-  // --- waitlist -------------------------------------------------------
-  "wl.badge": { en: "Early access · waitlist open", ja: "アーリーアクセス · 登録受付中" },
-  "wl.title": { en: "Board before mainnet.", ja: "メインネット前に乗船する。" },
-  "wl.sub": {
-    en: "Arc mainnet lands 09.16.26. Claim your handle now and you launch on day one, ahead of the crowd.",
-    ja: "Arcメインネットは2026年9月16日。今ハンドルを登録すれば、初日から先行してローンチできます。",
-  },
-  "wl.clearance": { en: "Your clearance", ja: "進捗" },
-  "wl.notStarted": { en: "Not started", ja: "未開始" },
-  "wl.step1": { en: "Claim your handle", ja: "ハンドルを登録" },
-  "wl.step1b": { en: "Your X handle holds your place on the board.", ja: "Xのハンドルでボードの順位を確保します。" },
-  "wl.step2": { en: "Prove your wallet", ja: "ウォレットを証明" },
-  "wl.step2b": {
-    en: "Sign one message to reach 100% and join the day-one allowlist. No transaction, no gas.",
-    ja: "メッセージに署名して100%に到達し、初日のアローリストに登録。取引不要・ガス不要。",
-  },
-  "wl.join": { en: "Claim place", ja: "順位を確保" },
-  "wl.joining": { en: "Claiming…", ja: "確保中…" },
-  "wl.sign": { en: "Sign to verify", ja: "署名して認証" },
-  "wl.signing": { en: "Waiting for signature…", ja: "署名待ち…" },
-  "wl.connectFirst": { en: "Sign in to continue", ja: "サインインして続行" },
-  "wl.placeholder": { en: "yourhandle", ja: "yourhandle" },
-  "wl.you": { en: "You are #{rank} of {total}", ja: "{total}人中 {rank}位" },
-  "wl.board": { en: "The board", ja: "ボード" },
-  "wl.total": { en: "{n} boarded", ja: "{n}人が登録済み" },
-  "wl.empty": { en: "Nobody has boarded yet. Be first.", ja: "まだ誰もいません。最初の一人に。" },
-  "wl.why": { en: "Why board early", ja: "早く乗る理由" },
-  "wl.why1": { en: "Launch on day one, before it opens to everyone.", ja: "一般公開前に、初日からローンチできます。" },
-  "wl.why2": { en: "Your handle on the public board, ranked by who was actually first.", ja: "公開ボードに掲載。順位は先着順です。" },
-  "wl.why3": { en: "Signed wallets join the day-one allowlist.", ja: "署名済みウォレットは初日アローリストに登録されます。" },
-  "wl.safe": {
-    en: "We store your public handle and address only — never keys, seed phrases or passwords. Signing is free and gasless.",
-    ja: "保存するのは公開ハンドルとアドレスのみ。秘密鍵・シードフレーズ・パスワードは扱いません。署名は無料でガス不要です。",
-  },
-  "wl.errTaken": { en: "That wallet is already on another handle.", ja: "そのウォレットは別のハンドルで登録済みです。" },
-  "wl.errHandle": { en: "That is not a valid X handle.", ja: "有効なXハンドルではありません。" },
-  "wl.errRate": { en: "Too many attempts. Try again later.", ja: "試行回数が多すぎます。後でお試しください。" },
-  "wl.errGeneric": { en: "Something went wrong. Try again.", ja: "エラーが発生しました。再試行してください。" },
-  "wl.unavailable": { en: "The waitlist is not connected yet.", ja: "ウェイトリストは未接続です。" },
-  "nav.waitlist": { en: "Waitlist", ja: "登録" },
-  // --- waitlist share ---------------------------------------------------
-  "wl.share": { en: "Spread the word", ja: "広めてください" },
-  "wl.shareBody": {
-    en: "Posting is what actually gets a launch seen. Share where you landed and bring people with you.",
-    ja: "投稿こそがローンチを広めます。あなたの順位をシェアして、仲間を連れてきてください。",
-  },
-  "wl.errPostBadUrl": { en: "That is not an X post link.", ja: "Xの投稿リンクではありません。" },
-  "wl.errPostNotFound": { en: "We could not find that post.", ja: "その投稿が見つかりません。" },
-  "wl.errPostWrongAuthor": {
-    en: "That post was written by a different account than the handle you claimed.",
-    ja: "その投稿は、登録したハンドルとは別のアカウントによるものです。",
-  },
-  "wl.errPostNoMention": {
-    en: "That post does not mention @tsukipad_.",
-    ja: "その投稿に @tsukipad_ が含まれていません。",
-  },
-  "wl.errPostUnavailable": {
-    en: "X did not answer. Try again in a moment.",
-    ja: "Xから応答がありません。少し後に再試行してください。",
-  },
-  "wl.follow": { en: "Follow @tsukipad_", ja: "@tsukipad_ をフォロー" },
-  "wl.post": { en: "Post your place", ja: "順位を投稿" },
-  "wl.postLocked": { en: "Connect a wallet to post", ja: "接続して投稿" },
-  "wl.postLockedWhy": {
-    en: "Your post carries your referral link, and that link is your wallet address. Connect one and everyone who joins through your post is credited to you.",
-    ja: "投稿にはあなたの紹介リンクが入り、そのリンクはあなたのウォレットアドレスです。接続すれば、あなたの投稿から参加した人はすべてあなたの紹介になります。",
-  },
-  "wl.tweet": {
-    en: "I'm #{rank} on the @tsukipad_ waitlist.\n\nFair-launch tokens straight into a Uniswap V3 USDC pool on Arc Network. $3,000 opening market cap, 100% of supply becomes the liquidity, LP burned on launch.\n\nJoin with my link:\n{link}",
-    ja: "@tsukipad_ のウェイトリストで{rank}位です。\n\nArc Network上のUniswap V3 USDCプールへ直接フェアローンチ。時価総額$3,000から、供給量の100%が流動性に、LPはローンチ時にバーン。\n\n私の紹介リンクから:\n{link}",
   },
   // --- uncollected fees -------------------------------------------------
   "fees.title": { en: "Still in the pool", ja: "プール内の未回収分" },
@@ -611,7 +640,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("en");
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
+    // Storage throws outright in a locked-down private window, which would take
+    // the whole effect -- and the browser-language fallback -- down with it.
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(STORAGE_KEY);
+    } catch {
+      /* no stored preference available */
+    }
     if (stored === "en" || stored === "ja") {
       setLangState(stored);
       return;
@@ -625,7 +661,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
-    window.localStorage.setItem(STORAGE_KEY, l);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, l);
+    } catch {
+      /* the choice just won't outlive the tab */
+    }
   }, []);
 
   const t = useCallback(
