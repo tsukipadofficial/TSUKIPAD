@@ -36,6 +36,7 @@ import {
   isCurveDeployed,
   chain,
   TOKEN_DEPLOYER_ADDRESS,
+  POOL_FEE,
 } from "@/lib/config";
 import {
   startTickForMarketCap,
@@ -131,12 +132,16 @@ export default function CreatePage() {
   const creatorTaxOk = creatorTaxBps >= 0 && creatorTaxBps <= maxTaxBps;
   const exemptFull = exempt.length >= (curveConfig?.maxSnipeExempt ?? 16);
 
-  // Fee summary for the preview: the recipient's cut of a curve trade is their
-  // share of the base fee plus the whole creator tax.
-  const totalFeeBps = (curveConfig?.tradeFeeBps ?? 100) + creatorTaxBps;
-  const yoursBps = curveConfig
-    ? (curveConfig.tradeFeeBps * (10_000 - curveConfig.protocolFeeBps)) / 10_000 + creatorTaxBps
-    : creatorTaxBps;
+  // Fee summary for the preview: the recipient keeps their share of the base
+  // fee plus the whole creator tax. Which base fee and which split depends on
+  // where the launch trades -- a curve charges its own, a direct pool charges
+  // the pool's and splits it at the launchpad's rate.
+  const baseFeeBps = onCurve ? (curveConfig?.tradeFeeBps ?? 100) : POOL_FEE / 100;
+  const splitProtocolBps = onCurve
+    ? (curveConfig?.protocolFeeBps ?? 3_000)
+    : ((padProtocolBps as number | undefined) ?? 3_000);
+  const totalFeeBps = baseFeeBps + creatorTaxBps;
+  const yoursBps = (baseFeeBps * (10_000 - splitProtocolBps)) / 10_000 + creatorTaxBps;
   const pct = (bps: number) => `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 2)}%`;
   const protocolBps = onCurve
     ? curveConfig?.protocolFeeBps
@@ -841,7 +846,7 @@ export default function CreatePage() {
                     mcap: curveConfig ? formatUsd(graduationMarketCapUsd(curveConfig)) : "…",
                   })}
                 />
-                <Row k={t("curve.pv.pool")} v="Uniswap V3 · 1% fee" />
+                <Row k={t("curve.pv.pool")} v={t("preview.badge.direct")} />
                 <Row k={t("curve.pv.liquidity")} v={t("curve.pv.liquidity.v")} />
               </dl>
               <p className="mt-4 border-t-2 border-line pt-4 text-xs leading-relaxed text-muted">
@@ -861,7 +866,14 @@ export default function CreatePage() {
             <dl className="mt-4 divide-y-2 divide-line border-t-2 border-line">
               <Row k={t("curve.pv.launchFee")} v={t("curve.pv.free")} />
               <Row k={t("curve.pv.paired")} v="USDC" />
-              <Row k={t("curve.pv.tradeFee")} v="1%" />
+              <Row
+                k={t("curve.pv.tradeFee")}
+                v={
+                  creatorTaxBps > 0
+                    ? t("curve.pv.tradeFee.v", { total: pct(totalFeeBps), yours: pct(yoursBps) })
+                    : pct(baseFeeBps)
+                }
+              />
               <Row k={t("fees.split")} v={splitLabel} />
               <Row k={t("preview.opensAt")} v={formatUsd(startActual)} />
               <Row k={t("preview.ceiling")} v={formatUsd(ceilingActual)} />

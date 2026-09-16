@@ -56,8 +56,8 @@ const STRINGS = {
   "hero.title.3": { en: "everywhere", ja: "即座に取引" },
   "hero.title.4": { en: "instantly.", ja: "から発行。" },
   "hero.body": {
-    en: "Open straight into a real Uniswap V3 pool paired with USDC, or start on a bonding curve that graduates into one at a $52K market cap. Either way you launch",
-    ja: "USDCとペアの本物のUniswap V3プールで直接開始するか、時価総額$52KでUniswapへ移行するボンディングカーブから始められます。どちらの場合も",
+    en: "Open straight into a real Uniswap v4 pool paired with USDC, or start on a bonding curve that graduates into one at a $52K market cap. Either way you launch",
+    ja: "USDCとペアの本物のUniswap v4プールで直接開始するか、時価総額$52KでUniswapへ移行するボンディングカーブから始められます。どちらの場合も",
   },
   "hero.body.bold": { en: "without putting up a cent", ja: "自己資金ゼロで発行でき" },
   "hero.body.end": { en: ", and it is locked forever by contract.", ja: "、流動性はコントラクトにより恒久的にロックされます。" },
@@ -193,8 +193,8 @@ const STRINGS = {
   },
   "create.type.direct.t": { en: "Direct pool", ja: "ダイレクトプール" },
   "create.type.direct.b": {
-    en: "Opens straight into a Uniswap V3 pool. Tradeable anywhere from block one.",
-    ja: "最初からUniswap V3プールで開始。最初のブロックからどこでも取引できます。",
+    en: "Opens straight into a Uniswap v4 pool. Tradeable anywhere from block one.",
+    ja: "最初からUniswap v4プールで開始。最初のブロックからどこでも取引できます。",
   },
   "curve.devBuy": { en: "Developer buy", ja: "開発者購入" },
   "curve.devBuy.hint": {
@@ -244,8 +244,8 @@ const STRINGS = {
   "curve.pv.liquidity": { en: "Liquidity", ja: "流動性" },
   "curve.pv.liquidity.v": { en: "Locked forever", ja: "永久ロック" },
   "curve.pv.explain": {
-    en: "Buyers push the price up the curve. Once {goal} has been raised the curve sells out, and that USDC plus the last 20% of supply become a Uniswap V3 pool at the same price, locked forever.",
-    ja: "購入によって価格がカーブを上昇します。{goal}が集まるとカーブは完売し、そのUSDCと残り20%の供給が同じ価格でUniswap V3プールとなり、永久にロックされます。",
+    en: "Buyers push the price up the curve. Once {goal} has been raised the curve sells out, and that USDC plus the supply held back becomes a Uniswap v4 pool at the same price, locked forever.",
+    ja: "購入によって価格がカーブを上昇します。{goal}が集まるとカーブは完売し、そのUSDCと留保された供給が同じ価格でUniswap v4プールとなり、永久にロックされます。",
   },
   "curve.badge": { en: "bonding curve", ja: "ボンディングカーブ" },
   "curve.graduated": { en: "graduated", ja: "移行済" },
@@ -254,12 +254,12 @@ const STRINGS = {
   "curve.graduatesAt": { en: "Graduates at", ja: "移行時価総額" },
   "curve.toGo": { en: "Left to graduate", ja: "移行まで残り" },
   "curve.explain": {
-    en: "When the curve sells out, {goal} and the last 20% of supply move into a Uniswap V3 pool at the same price, and that liquidity is locked forever. Until then tokens are bought from and sold back to the curve, and cannot be sent between wallets.",
-    ja: "カーブが完売すると、{goal}と残り20%の供給が同じ価格でUniswap V3プールへ移り、その流動性は永久にロックされます。それまではカーブとの売買のみで、ウォレット間の送金はできません。",
+    en: "When the curve sells out, {goal} and the supply held back move into a Uniswap v4 pool at the same price, and that liquidity is locked forever. Until then tokens are bought from and sold back to the curve, and cannot be sent between wallets.",
+    ja: "カーブが完売すると、{goal}と留保された供給が同じ価格でUniswap v4プールへ移り、その流動性は永久にロックされます。それまではカーブとの売買のみで、ウォレット間の送金はできません。",
   },
   "curve.graduatedExplain": {
-    en: "This launch sold out its curve and now trades in a locked Uniswap V3 pool at the 1% fee tier.",
-    ja: "この発行はカーブを完売し、現在はロックされたUniswap V3プール（手数料1%）で取引されています。",
+    en: "This launch sold out its curve and now trades in a locked Uniswap v4 pool at the 1% fee tier.",
+    ja: "この発行はカーブを完売し、現在はロックされたUniswap v4プール（手数料1%）で取引されています。",
   },
   "curve.fees.title": { en: "Creator fees", ja: "発行者手数料" },
   "curve.fees.owed": { en: "waiting to be paid out", ja: "支払い待ち" },
@@ -300,7 +300,7 @@ const STRINGS = {
     ja: "およそ{amount}の純購入で{start}から上限に到達し、その時点で全トークンが売却されます。上限は主に伸びしろを決めるもので、初期の値動きにはほとんど影響しません。速度ではなく目標の高さで選んでください。",
   },
   "fees.split": { en: "Trading fees", ja: "取引手数料の配分" },
-  "preview.badge.direct": { en: "Uniswap V3 · 1% fee", ja: "Uniswap V3 · 手数料1%" },
+  "preview.badge.direct": { en: "Uniswap v4 · 1% fee", ja: "Uniswap v4 · 手数料1%" },
   "preview.feesTo": { en: "Fees to", ja: "手数料の行き先" },
   "preview.explain.short": {
     en: "Opens at {start} with every token already in the pool, and the liquidity is locked at launch. Nobody can buy in lower than you.",
