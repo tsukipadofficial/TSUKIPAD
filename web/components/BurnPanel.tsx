@@ -80,13 +80,20 @@ export function BurnPanel({ launch }: { launch: LaunchView }) {
         </p>
       ) : null}
 
-      <button
+      {/* A real button, not a footnote. The burn only happens when somebody
+          calls it, so the one control that makes this panel's numbers move has
+          to look like the thing to press. */}
+      <Button
+        className="mt-4 w-full"
+        variant="pink"
         onClick={handleSweep}
         disabled={busy || !isConnected || chainId !== chain.id}
-        className="mt-3 w-full text-center text-[0.6875rem] text-faint underline-offset-4 transition-colors hover:text-pink hover:underline disabled:opacity-50"
       >
-        {t("rewards.sweep")}
-      </button>
+        {busy ? t("burn.burning") : t("burn.sweep")}
+      </Button>
+      <p className="mt-2 text-center text-[0.6875rem] leading-relaxed text-faint">
+        {t("burn.sweepHint")}
+      </p>
     </Card>
   );
 }

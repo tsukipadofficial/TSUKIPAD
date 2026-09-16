@@ -161,6 +161,12 @@ const STRINGS = {
   },
   "burn.spent": { en: "Spent buying back", ja: "買い戻し総額" },
   "burn.burned": { en: "Supply destroyed", ja: "焼却済供給量" },
+  "burn.sweep": { en: "Buy back & burn now", ja: "今すぐ買い戻して焼却" },
+  "burn.burning": { en: "Burning…", ja: "焼却中…" },
+  "burn.sweepHint": {
+    en: "Anyone can press this. It collects the fees the pool has earned, spends them buying the token back, and destroys what it buys.",
+    ja: "誰でも実行できます。プールが得た手数料を回収し、それで買い戻して焼却します。",
+  },
   "burn.ofSupply": { en: "{pct} of the original supply is gone", ja: "当初供給量の{pct}が焼却済" },
   "token.deflationary": { en: "deflationary", ja: "デフレ型" },
   "card.burns": { en: "burns", ja: "焼却" },
@@ -413,7 +419,8 @@ const STRINGS = {
   "trade.buySym": { en: "Buy {sym}", ja: "{sym}を買う" },
   "trade.sellSym": { en: "Sell {sym}", ja: "{sym}を売る" },
   "trade.wrongNetwork": { en: "Wrong network", ja: "ネットワークが違います" },
-  "trade.nothingToSellInto": { en: "Nothing to sell into yet — no one has bought, so the pool holds no USDC.", ja: "まだ売却できません。買い手がいないため、プールにUSDCがありません。" },
+  "trade.overBalance": { en: "That is more than your balance.", ja: "残高を超えています。" },
+  "trade.nothingToSellInto": { en: "No USDC in the pool to sell into — someone has to buy first.", ja: "プールにUSDCがないため売却できません。まず誰かが購入する必要があります。" },
   "trade.quoteUnavailable": { en: "Quote unavailable — check balance and approval.", ja: "見積もりを取得できません。残高と承認をご確認ください。" },
   "trade.soldOut": {
     en: "The curve is fully bought out — there is no supply left in the range. You can still sell into it.",

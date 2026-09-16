@@ -191,6 +191,12 @@ export function TradePanel({ launch }: { launch: LaunchView }) {
   }
 
   const balanceFloat = balanceIn ? formatUnitsFloat(balanceIn as bigint, decimalsIn) : 0;
+  // A share of the balance, to the wei. Going through a float rounds an
+  // 18-decimal balance to ~17 significant digits, and when that rounds *up*
+  // the "100%" sell asks for more than the wallet holds and cannot be quoted.
+  const exactShare = (pct: number) =>
+    balanceIn ? formatUnits(((balanceIn as bigint) * BigInt(pct)) / 100n, decimalsIn) : "0";
+  const overBalance = balanceIn !== undefined && amountIn > (balanceIn as bigint);
   const outFloat = quote !== null ? formatUnitsFloat(quote, decimalsOut) : null;
 
   const priceImpact = useMemo(() => {
@@ -234,7 +240,7 @@ export function TradePanel({ launch }: { launch: LaunchView }) {
           <div className="mb-1.5 flex items-baseline justify-between">
             <span className="eyebrow">{t("trade.youPay")}</span>
             <button
-              onClick={() => setAmount(balanceFloat.toString())}
+              onClick={() => setAmount(exactShare(100))}
               className="tabular text-xs text-muted transition-colors hover:text-lime"
             >
               {t("trade.balance", {
@@ -270,7 +276,7 @@ export function TradePanel({ launch }: { launch: LaunchView }) {
               : QUICK_PCT.map((p) => (
                   <button
                     key={p}
-                    onClick={() => setAmount(((balanceFloat * p) / 100).toString())}
+                    onClick={() => setAmount(exactShare(p))}
                     className="tabular flex-1 border-2 border-line py-1 text-xs text-muted transition-colors hover:border-pink hover:text-pink"
                   >
                     {p}%
@@ -336,9 +342,11 @@ export function TradePanel({ launch }: { launch: LaunchView }) {
 
         {quoteError && amountIn > 0n ? (
           <p className="text-xs text-amber">
-            {side === "sell" && launch.curveProgress <= 0
-              ? t("trade.nothingToSellInto")
-              : t("trade.quoteUnavailable")}
+            {overBalance
+              ? t("trade.overBalance")
+              : side === "sell" && launch.curveProgress <= 0
+                ? t("trade.nothingToSellInto")
+                : t("trade.quoteUnavailable")}
           </p>
         ) : null}
 

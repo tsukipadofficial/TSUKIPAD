@@ -220,20 +220,32 @@ function buildLaunchView(
   const tickLower = Number(l.tickLower);
   const tickUpper = Number(l.tickUpper);
 
-  const marketCapUsd = marketCapFromSqrtPriceX96(extra.sqrtPriceX96, supplyWhole);
+  // A sell that takes the last USDC out of the pool leaves the pool's own
+  // price marker *below* the range floor -- the swap runs on to its price
+  // limit through empty liquidity -- and a range bought out to the top leaves
+  // it above the ceiling. Neither is a price anyone can trade at: the next buy
+  // fills from the floor, the next sell from the ceiling. Everything shown is
+  // therefore derived from the tick clamped to the range, so a launch whose
+  // pool was emptied reads as its $2.5K floor rather than $0.
+  const currentTick = Math.min(Math.max(extra.currentTick, tickLower), tickUpper);
+  const inRange = currentTick === extra.currentTick;
+
+  const marketCapUsd = inRange
+    ? marketCapFromSqrtPriceX96(extra.sqrtPriceX96, supplyWhole)
+    : marketCapAtTick(currentTick, supplyWhole);
   const startMarketCapUsd = marketCapAtTick(tickLower, supplyWhole);
   const ceilingMarketCapUsd = marketCapAtTick(tickUpper, supplyWhole);
 
   // Progress is measured in supply sold, not distance through the tick range:
   // it is what actually tells a buyer how much is left to go around.
-  const curveProgress = fractionSold(tickLower, tickUpper, extra.currentTick);
-  const remaining = remainingCapacityUsd(tickLower, tickUpper, extra.currentTick, supplyWhole);
+  const curveProgress = fractionSold(tickLower, tickUpper, currentTick);
+  const remaining = remainingCapacityUsd(tickLower, tickUpper, currentTick, supplyWhole);
   const totalCapacityUsd = curveCapacityUsd(tickLower, tickUpper, supplyWhole);
 
   return {
     ...l,
     kind: "direct",
-    priceUsd: tickToHumanPrice(extra.currentTick),
+    priceUsd: tickToHumanPrice(currentTick),
     tickLower,
     tickUpper,
     name: extra.name,
@@ -241,7 +253,7 @@ function buildLaunchView(
     totalSupply: extra.totalSupply,
     supplyWhole,
     metadataURI: extra.metadataURI,
-    currentTick: extra.currentTick,
+    currentTick,
     sqrtPriceX96: extra.sqrtPriceX96,
     marketCapUsd,
     startMarketCapUsd,

@@ -24,6 +24,7 @@ import {
   USDC_DECIMALS,
 } from "@/lib/config";
 import { indexerClient } from "@/lib/indexer-rpc";
+import { cmd, redisConfigured } from "@/lib/redis";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,11 +33,22 @@ export const dynamic = "force-dynamic";
 /// when this was written. Held a little under the ceiling on purpose.
 const CHUNK = 9_000n;
 
-/// ~0.51s blocks, so one chunk is ~170 minutes. Six of them reach back roughly
-/// 17 hours -- enough to show a launch's whole trading life on testnet. The walk
-/// stops as soon as MAX_TRADES are found, so a busy pool costs one request.
-const MAX_CHUNKS = 13;
+/// ~0.51s blocks, so one chunk is ~170 minutes. Log calls per request are
+/// capped well under what trips the public RPCs' burst limit; a backfill that
+/// needs more resumes on the next poll (see `Tape`). The walk stops as soon as
+/// MAX_TRADES are found, so a busy pool costs one request.
+const CHUNKS_PER_REQUEST = 5;
+
+/// How far back a tape is ever built: ~117,000 blocks, roughly 17 hours, which
+/// covers a launch's whole trading life on testnet. Without a floor the
+/// backfill walks toward block 0 forever -- a pool with three trades would
+/// still be scanning millions of empty blocks days later, which is exactly the
+/// traffic that gets the public endpoints to throttle us.
+const MAX_BACKFILL_CHUNKS = 13;
 const MAX_TRADES = 30;
+
+/// Five chunk scans with retries can outlast Vercel's default budget.
+export const maxDuration = 30;
 
 /// The launchpad swaps against the pool itself, converting the token-side fees
 /// it just collected into USDC. Those are bookkeeping, not trades: they appear
@@ -75,6 +87,7 @@ export async function GET(req: Request) {
   }
 
   const client = indexerClient();
+  const cacheKey = `tape:v3:${(pool ?? "").toLowerCase()}:${(token ?? "").toLowerCase()}`;
 
   try {
     // Typed through helpers rather than inline: `getLogs` only narrows its
@@ -137,27 +150,77 @@ export async function GET(req: Request) {
       });
 
     const head = await client.getBlockNumber();
-    let entries: TapeEntry[] = [];
-    let to = head;
 
-    for (let i = 0; i < MAX_CHUNKS; i++) {
-      const from = to > CHUNK ? to - CHUNK : 0n;
+    // Whatever the last request left behind: the tape as of `head`, and how far
+    // back its backfill has reached. Every poll then scans only the blocks
+    // since -- one call per event type instead of a fresh walk over ~117,000
+    // blocks. That walk, repeated every six seconds by every open tab, is what
+    // got the public RPCs to throttle us. The backfill itself is resumable for
+    // the same reason: a burst of thirteen calls trips the limit, so each
+    // request does a few chunks, saves where it stopped, and the next carries on.
+    const prior = await loadTape(cacheKey);
+    const tape: Tape = prior ?? {
+      head: Number(head),
+      low: Number(head) + 1,
+      floor: Number(head > CHUNK * BigInt(MAX_BACKFILL_CHUNKS) ? head - CHUNK * BigInt(MAX_BACKFILL_CHUNKS) : 0n),
+      done: false,
+      entries: [],
+    };
+    let budget = CHUNKS_PER_REQUEST;
+    let failure: unknown = null;
+
+    const scan = async (lo: bigint, hi: bigint): Promise<TapeEntry[]> => {
       const [p, c] = await Promise.all([
-        hasPool ? poolRange(from, to).then(fromPool) : Promise.resolve([]),
-        hasCurve ? curveRange(from, to).then(fromCurve) : Promise.resolve([]),
+        hasPool ? poolRange(lo, hi).then(fromPool) : Promise.resolve([]),
+        hasCurve ? curveRange(lo, hi).then(fromCurve) : Promise.resolve([]),
       ]);
-      entries = [...p, ...c, ...entries];
-      if (entries.length >= MAX_TRADES || from === 0n) break;
-      to = from - 1n;
-    }
+      return [...p, ...c];
+    };
+    const absorb = (found: TapeEntry[]) => {
+      const seen = new Set(tape.entries.map((e) => e.id));
+      tape.entries = [...found.filter((e) => !seen.has(e.id)), ...tape.entries]
+        .sort((x, y) => y.blockNumber - x.blockNumber || y.logIndex - x.logIndex)
+        .slice(0, MAX_TRADES);
+    };
 
-    const trades = entries
-      .sort((x, y) => y.blockNumber - x.blockNumber || y.logIndex - x.logIndex)
-      .slice(0, MAX_TRADES)
-      .map(({ logIndex: _, ...rest }) => rest);
+    try {
+      // Catch up: from the last head seen up to now, bottom-up so that `head`
+      // only ever advances over blocks that were actually read.
+      if (prior) {
+        let from = BigInt(prior.head) + 1n;
+        while (from <= head && budget > 0) {
+          const to = from + CHUNK - 1n < head ? from + CHUNK - 1n : head;
+          absorb(await scan(from, to));
+          tape.head = Number(to);
+          from = to + 1n;
+          budget--;
+        }
+      }
+      // Backfill: from the lowest block already read, downward, until the tape
+      // is full or the chain begins.
+      while (!tape.done && budget > 0) {
+        const hi = BigInt(tape.low) - 1n;
+        if (hi < BigInt(tape.floor)) { tape.done = true; break; }
+        const floor = BigInt(tape.floor);
+        const lo = hi >= floor + CHUNK ? hi - CHUNK + 1n : floor;
+        absorb(await scan(lo, hi));
+        tape.low = Number(lo);
+        budget--;
+        if (tape.entries.length >= MAX_TRADES || lo <= floor) tape.done = true;
+      }
+    } catch (e) {
+      // Every RPC in the list refused. Keep what was read -- the next request
+      // resumes from exactly here -- and show it, a beat behind.
+      failure = e;
+    }
+    await saveTape(cacheKey, tape);
+
+    if (failure && tape.entries.length === 0 && !tape.done) throw failure;
+
+    const trades = tape.entries.map(({ logIndex: _, ...rest }) => rest);
 
     return NextResponse.json(
-      { trades },
+      { trades, complete: tape.done },
       // Shared cache so many viewers of a hot token collapse into one upstream
       // read; stale-while-revalidate keeps the tape instant on repeat paints.
       { headers: { "cache-control": "public, s-maxage=5, stale-while-revalidate=25" } },
@@ -169,5 +232,33 @@ export async function GET(req: Request) {
       { error: e instanceof Error ? e.message : "rpc failed" },
       { status: 502 },
     );
+  }
+}
+
+/// `head` is the newest block read, `low` the oldest, `floor` the oldest it
+/// will ever read; `done` says the backfill reached MAX_TRADES or that floor,
+/// after which a poll only scans the handful of blocks since `head`.
+type Tape = { head: number; low: number; floor: number; done: boolean; entries: TapeEntry[] };
+
+/// A day is plenty: a tape nobody has looked at for that long is rebuilt from
+/// a fresh backfill, which is what it would have been served anyway.
+const TAPE_TTL_S = 86_400;
+
+async function loadTape(key: string): Promise<Tape | null> {
+  if (!redisConfigured) return null;
+  try {
+    const raw = await cmd<string | null>("GET", key);
+    return raw ? (JSON.parse(raw) as Tape) : null;
+  } catch {
+    return null; // a cache miss, never a failed request
+  }
+}
+
+async function saveTape(key: string, tape: Tape): Promise<void> {
+  if (!redisConfigured) return;
+  try {
+    await cmd("SET", key, JSON.stringify(tape), "EX", String(TAPE_TTL_S));
+  } catch {
+    // Next request scans again; nothing shown is wrong.
   }
 }

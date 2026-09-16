@@ -10,6 +10,6 @@ import { createPublicClient, fallback, http } from "viem";
 import { INDEXER_RPC_URLS, chain } from "./config";
 
 export const indexerTransport = () =>
-  fallback(INDEXER_RPC_URLS.map((url) => http(url, { retryCount: 1, timeout: 20_000 })), { rank: false });
+  fallback(INDEXER_RPC_URLS.map((url) => http(url, { retryCount: 2, retryDelay: 400, timeout: 8_000 })), { rank: false });
 
 export const indexerClient = () => createPublicClient({ chain, transport: indexerTransport() });
