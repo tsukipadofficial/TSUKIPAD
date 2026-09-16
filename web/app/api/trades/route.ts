@@ -12,7 +12,8 @@
 /// query on the one endpoint that answers it and puts a cache in front.
 
 import { NextResponse } from "next/server";
-import { createPublicClient, http, formatUnits, isAddress, parseAbiItem, type Address } from "viem";
+import { createPublicClient, http, formatUnits, isAddress,
+  isHex, parseAbiItem, type Address } from "viem";
 
 import { SWAP_EVENT } from "@/lib/indexer";
 import {
@@ -67,7 +68,8 @@ export async function GET(req: Request) {
   const token = params.get("token");
   // A curve launch passes its token (for curve trades) and, once graduated, its
   // pool as well; the tape shows the curve history leading into the pool's.
-  const hasPool = !!pool && isAddress(pool) && BigInt(pool) !== 0n;
+  // A v4 pool is identified by the 32-byte hash of its key, not an address.
+  const hasPool = !!pool && isHex(pool) && pool.length === 66 && BigInt(pool) !== 0n;
   const hasCurve = !!token && isAddress(token) && BigInt(CURVE_ADDRESS) !== 0n;
   if (!hasPool && !hasCurve) {
     return NextResponse.json({ error: "bad pool" }, { status: 400 });
