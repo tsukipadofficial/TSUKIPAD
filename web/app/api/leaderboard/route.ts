@@ -12,6 +12,7 @@ import { K, revive } from "@/lib/indexer";
 import { topEarners } from "@/lib/earnings";
 import { launchMeta, mcapFromPriceX18, type LaunchMeta } from "@/lib/launchmeta";
 import { netPnl, unrealized, marketValue, avgEntryX18, type Position } from "@/lib/pnl";
+import { MARKET_KEY_PREFIX } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -101,7 +102,7 @@ export async function GET(req: NextRequest) {
     // Lifetime earnings ride the same round trip as the positions.
     const raw = await pipeline<string | null>([
       ...tokens.map((t): (string | number)[] => ["GET", K.position(wallet, t)]),
-      ["GET", `earn:total:${wallet.toLowerCase()}`],
+      ["GET", `${MARKET_KEY_PREFIX}earn:total:${wallet.toLowerCase()}`],
     ]);
     const earnedRaw = raw[tokens.length];
     let realized = 0n, unreal = 0n, volume = 0n, value = 0n, spent = 0n;

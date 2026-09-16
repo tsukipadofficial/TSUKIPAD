@@ -17,7 +17,7 @@
 import { parseAbiItem, type Address } from "viem";
 
 import { curveAbi, launchpadAbi } from "./abi";
-import { CURVE_ADDRESS, LAUNCHPAD_ADDRESS, SWAP_ROUTER_ADDRESS, isCurveDeployed } from "./config";
+import { CURVE_ADDRESS, LAUNCHPAD_ADDRESS, MARKET_KEY_PREFIX as M, SWAP_ROUTER_ADDRESS, isCurveDeployed } from "./config";
 import { getLogsSplit, indexerClient } from "./indexer-rpc";
 import { poolIdFor } from "./v4";
 import { cmd, pipeline } from "./redis";
@@ -45,13 +45,13 @@ const MAX_CHUNKS_PER_RUN = 26;
 const MAX_POOLS_PER_RUN = 8;
 
 export const K = {
-  pools: "idx:pools",
-  cursor: (pool: string) => `idx:cur:${pool.toLowerCase()}`,
-  position: (w: string, t: string) => `pos:${w.toLowerCase()}:${t.toLowerCase()}`,
-  traderTokens: (w: string) => `pos:tokens:${w.toLowerCase()}`,
-  tokenTraders: (t: string) => `pos:traders:${t.toLowerCase()}`,
-  traders: "pos:traders",
-  volume: "lb:volume",
+  pools: `${M}idx:pools`,
+  cursor: (pool: string) => `${M}idx:cur:${pool.toLowerCase()}`,
+  position: (w: string, t: string) => `${M}pos:${w.toLowerCase()}:${t.toLowerCase()}`,
+  traderTokens: (w: string) => `${M}pos:tokens:${w.toLowerCase()}`,
+  tokenTraders: (t: string) => `${M}pos:traders:${t.toLowerCase()}`,
+  traders: `${M}pos:traders`,
+  volume: `${M}lb:volume`,
 };
 
 const client = indexerClient;

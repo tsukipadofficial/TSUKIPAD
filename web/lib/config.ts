@@ -21,6 +21,15 @@ export const TICK_SPACING = 200;
 export const IS_MAINNET = process.env.NEXT_PUBLIC_NETWORK === "mainnet";
 const BASE_CHAIN = IS_MAINNET ? arc : arcTestnet;
 
+/// Prefix for Redis keys that describe one network's market: trades, positions,
+/// the leaderboard, earnings, cached tapes. Without it mainnet would open with
+/// testnet's traders on its leaderboard. Testnet keeps the bare keys it has
+/// always used, so its existing data is untouched.
+///
+/// Profiles and referral codes are deliberately left out: they belong to a
+/// wallet, and a wallet is the same on both networks.
+export const MARKET_KEY_PREFIX = IS_MAINNET ? "mainnet:" : "";
+
 /// Docs list rpc.testnet.arc.io; viem ships rpc.testnet.arc.network. Both resolve
 /// to the same chain, and this is overridable for local anvil work.
 ///

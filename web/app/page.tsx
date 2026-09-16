@@ -170,11 +170,11 @@ function Hero({ count, totalCap }: { count: number; totalCap: number }) {
             <Badge tone="lime">
               <LiveDot /> {t(IS_MAINNET ? "hero.badge.mainnet" : "hero.badge.testnet")}
             </Badge>
-            <Badge tone="cyan">Uniswap V3</Badge>
+            <Badge tone="cyan">Uniswap v4</Badge>
           </div>
 
           <h1 className="text-4xl font-bold leading-[0.95] tracking-tight sm:text-6xl">
-            {t("hero.title.1")} <span className="text-lime">$3K</span>
+            {t("hero.title.1")} <span className="text-lime">$2.5K</span>
             <br />
             {t("hero.title.2")} <span className="text-cyan">{t("hero.title.3")}</span>
             <br />

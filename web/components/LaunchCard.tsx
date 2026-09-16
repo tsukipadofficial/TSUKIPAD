@@ -131,7 +131,7 @@ export function LaunchCard({ launch }: { launch: LaunchView }) {
           <span className="tabular">
             {curve
               ? curve.graduated
-                ? "Uniswap V3"
+                ? "Uniswap v4"
                 : t("card.graduatesAt", { amount: formatUsd(launch.ceilingMarketCapUsd) })
               : t("card.ceiling", { amount: formatUsd(launch.ceilingMarketCapUsd) })}
           </span>

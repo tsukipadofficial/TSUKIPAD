@@ -6,7 +6,7 @@ import { useT } from "@/lib/i18n";
 import { priceMultipleAtFractionSold } from "@/lib/launch-math";
 
 /// Plots price against the share of supply sold — the curve a buyer actually
-/// walks. It is genuinely convex: because a Uniswap V3 range holds constant
+/// walks. It is genuinely convex: because a Uniswap concentrated range holds constant
 /// liquidity, the last tokens cost dramatically more than the first. Plotting
 /// against tick progress instead would draw a straight line and hide that.
 ///

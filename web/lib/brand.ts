@@ -33,10 +33,10 @@ export const X_HANDLE = "tsukipad_";
 export const TAGLINE = "launch tokens on Arc Network";
 
 export const DESCRIPTION =
-  "Fair-launch tokens straight into a Uniswap V3 USDC pool, built on Arc Network. No presale, no seed capital, liquidity locked forever.";
+  "Fair-launch tokens straight into a Uniswap v4 USDC pool, built on Arc Network. No presale, no seed capital, liquidity locked forever.";
 
 export const SOCIAL_DESCRIPTION =
-  "Launch at $3K into a real Uniswap V3 pool. Single-sided liquidity, so it costs you nothing. Locked forever.";
+  "Launch at $2.5K into a real Uniswap v4 pool. Single-sided liquidity, so it costs you nothing. Locked forever.";
 
 /// Namespace for anything persisted in the browser. Renaming the product must
 /// not silently reset a returning visitor's language choice, so this key is

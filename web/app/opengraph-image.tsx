@@ -37,7 +37,7 @@ export default function OpengraphImage() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ fontSize: 84, fontWeight: 700, color: "#f4f4f0", lineHeight: 1.05 }}>
-            Launch at $3K.
+            Launch at $2.5K.
           </div>
           <div style={{ fontSize: 84, fontWeight: 700, color: "#c8ff2e", lineHeight: 1.05 }}>
             Tradeable everywhere.
@@ -46,7 +46,7 @@ export default function OpengraphImage() {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           <div style={{ display: "flex", fontSize: 30, color: "#8c8c99" }}>
-            Built on Arc Network · Uniswap V3 · liquidity locked forever
+            Built on Arc Network · Uniswap v4 · liquidity locked forever
           </div>
           <div
             style={{

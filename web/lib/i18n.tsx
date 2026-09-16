@@ -73,7 +73,7 @@ const STRINGS = {
   "how.1.t": { en: "Deploy", ja: "デプロイ" },
   "how.1.b": { en: "Fixed supply, no mint, no owner, no tax.", ja: "固定供給。ミント機能・オーナー権限・税なし。" },
   "how.2.t": { en: "Open pool", ja: "プール開設" },
-  "how.2.b": { en: "A USDC pool opens at your chosen $3K market cap.", ja: "指定した時価総額（例：$3,000）でUSDCプールが開きます。" },
+  "how.2.b": { en: "A USDC pool opens at a $2.5K market cap.", ja: "時価総額$2,500でUSDCプールが開きます。" },
   "how.3.t": { en: "Seed", ja: "供給" },
   "how.3.b": { en: "100% of supply becomes single-sided liquidity. You pay nothing.", ja: "供給量の100%が片側流動性になります。費用はかかりません。" },
   "how.4.t": { en: "Trade", ja: "取引" },

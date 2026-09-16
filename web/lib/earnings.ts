@@ -14,7 +14,7 @@
 import { parseAbiItem, type Address } from "viem";
 
 import { launchpadAbi } from "./abi";
-import { LAUNCHPAD_ADDRESS, USDC_ADDRESS } from "./config";
+import { LAUNCHPAD_ADDRESS, MARKET_KEY_PREFIX as M, USDC_ADDRESS } from "./config";
 import { getLogsSplit, indexerClient } from "./indexer-rpc";
 import { cmd, pipeline } from "./redis";
 
@@ -26,9 +26,9 @@ const CHUNK = 20_000n;
 const MAX_CHUNKS_PER_RUN = 12;
 
 export const EK = {
-  cursor: "earn:cursor",
-  total: (w: string) => `earn:total:${w.toLowerCase()}`,
-  board: "earn:board",
+  cursor: `${M}earn:cursor`,
+  total: (w: string) => `${M}earn:total:${w.toLowerCase()}`,
+  board: `${M}earn:board`,
 };
 
 const client = indexerClient;

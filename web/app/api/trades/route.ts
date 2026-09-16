@@ -22,6 +22,7 @@ import {
   SWAP_ROUTER_ADDRESS,
   TOKEN_DECIMALS,
   USDC_DECIMALS,
+  MARKET_KEY_PREFIX,
 } from "@/lib/config";
 import { getLogsSplit, indexerClient } from "@/lib/indexer-rpc";
 import { cmd, redisConfigured } from "@/lib/redis";
@@ -87,7 +88,7 @@ export async function GET(req: Request) {
   }
 
   const client = indexerClient();
-  const cacheKey = `tape:v5:${(pool ?? "").toLowerCase()}:${(token ?? "").toLowerCase()}`;
+  const cacheKey = `${MARKET_KEY_PREFIX}tape:v5:${(pool ?? "").toLowerCase()}:${(token ?? "").toLowerCase()}`;
 
   try {
     // Typed through helpers rather than inline: `getLogs` only narrows its
