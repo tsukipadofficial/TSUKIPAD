@@ -23,7 +23,7 @@ import {
   TOKEN_DECIMALS,
   USDC_DECIMALS,
 } from "@/lib/config";
-import { indexerClient } from "@/lib/indexer-rpc";
+import { getLogsSplit, indexerClient } from "@/lib/indexer-rpc";
 import { cmd, redisConfigured } from "@/lib/redis";
 
 export const runtime = "nodejs";
@@ -93,21 +93,31 @@ export async function GET(req: Request) {
     // Typed through helpers rather than inline: `getLogs` only narrows its
     // return to decoded `args` when the event is bound at the call site.
     const poolRange = (from: bigint, to: bigint) =>
-      client.getLogs({
-        address: SWAP_ROUTER_ADDRESS,
-        event: SWAP_EVENT,
-        args: { id: pool as `0x${string}` },
-        fromBlock: from,
-        toBlock: to,
-      });
+      getLogsSplit(
+        (lo, hi) =>
+          client.getLogs({
+            address: SWAP_ROUTER_ADDRESS,
+            event: SWAP_EVENT,
+            args: { id: pool as `0x${string}` },
+            fromBlock: lo,
+            toBlock: hi,
+          }),
+        from,
+        to,
+      );
     const curveRange = (from: bigint, to: bigint) =>
-      client.getLogs({
-        address: CURVE_ADDRESS,
-        event: CURVE_TRADE_EVENT,
-        args: { token: token as Address },
-        fromBlock: from,
-        toBlock: to,
-      });
+      getLogsSplit(
+        (lo, hi) =>
+          client.getLogs({
+            address: CURVE_ADDRESS,
+            event: CURVE_TRADE_EVENT,
+            args: { token: token as Address },
+            fromBlock: lo,
+            toBlock: hi,
+          }),
+        from,
+        to,
+      );
 
     const fromPool = (logs: Awaited<ReturnType<typeof poolRange>>): TapeEntry[] =>
       logs.flatMap((log) => {

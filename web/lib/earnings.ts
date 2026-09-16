@@ -15,7 +15,7 @@ import { parseAbiItem, type Address } from "viem";
 
 import { launchpadAbi } from "./abi";
 import { LAUNCHPAD_ADDRESS, USDC_ADDRESS } from "./config";
-import { indexerClient } from "./indexer-rpc";
+import { getLogsSplit, indexerClient } from "./indexer-rpc";
 import { cmd, pipeline } from "./redis";
 
 export const TRANSFER_EVENT = parseAbiItem(
@@ -78,13 +78,18 @@ export async function runEarnings(): Promise<{
   while (from <= head && chunks < MAX_CHUNKS_PER_RUN) {
     const to = from + CHUNK - 1n > head ? head : from + CHUNK - 1n;
 
-    const logs = await pub.getLogs({
-      address: USDC_ADDRESS as Address,
-      event: TRANSFER_EVENT,
-      args: { from: LAUNCHPAD_ADDRESS as Address },
-      fromBlock: from,
-      toBlock: to,
-    });
+    const logs = await getLogsSplit(
+      (lo, hi) =>
+        pub.getLogs({
+          address: USDC_ADDRESS as Address,
+          event: TRANSFER_EVENT,
+          args: { from: LAUNCHPAD_ADDRESS as Address },
+          fromBlock: lo,
+          toBlock: hi,
+        }),
+      from,
+      to,
+    );
 
     const gained = new Map<string, bigint>();
     for (const log of logs) {

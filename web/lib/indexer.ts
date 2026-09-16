@@ -18,7 +18,7 @@ import { parseAbiItem, type Address } from "viem";
 
 import { curveAbi, launchpadAbi } from "./abi";
 import { CURVE_ADDRESS, LAUNCHPAD_ADDRESS, SWAP_ROUTER_ADDRESS, isCurveDeployed } from "./config";
-import { indexerClient } from "./indexer-rpc";
+import { getLogsSplit, indexerClient } from "./indexer-rpc";
 import { poolIdFor } from "./v4";
 import { cmd, pipeline } from "./redis";
 import { EMPTY, applyBuy, applySell, type Position } from "./pnl";
@@ -193,24 +193,34 @@ async function indexPool(
     const to = from + CHUNK - 1n > head ? head : from + CHUNK - 1n;
     const rows: TradeRow[] = curve
       ? (
-          await pub.getLogs({
-            address: CURVE_ADDRESS,
-            event: CURVE_TRADE_EVENT,
-            args: { token: token as Address },
-            fromBlock: from,
-            toBlock: to,
-          })
+          await getLogsSplit(
+            (lo, hi) =>
+              pub.getLogs({
+                address: CURVE_ADDRESS,
+                event: CURVE_TRADE_EVENT,
+                args: { token: token as Address },
+                fromBlock: lo,
+                toBlock: hi,
+              }),
+            from,
+            to,
+          )
         )
           .map(fromCurveTrade)
           .filter((r): r is TradeRow => r !== null)
       : (
-          await pub.getLogs({
-            address: SWAP_ROUTER_ADDRESS,
-            event: SWAP_EVENT,
-            args: { id: pool as `0x${string}` },
-            fromBlock: from,
-            toBlock: to,
-          })
+          await getLogsSplit(
+            (lo, hi) =>
+              pub.getLogs({
+                address: SWAP_ROUTER_ADDRESS,
+                event: SWAP_EVENT,
+                args: { id: pool as `0x${string}` },
+                fromBlock: lo,
+                toBlock: hi,
+              }),
+            from,
+            to,
+          )
         )
           .map(fromSwap)
           .filter((r): r is TradeRow => r !== null);
