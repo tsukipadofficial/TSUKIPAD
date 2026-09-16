@@ -64,6 +64,13 @@ echo "==> deploying launchpad stack"
 PRIVATE_KEY="$KEY" forge script script/Deploy.s.sol:Deploy \
   --rpc-url "$RPC" --broadcast --skip-simulation >/dev/null
 
+# anvil shares the testnet chain id, so a local run would otherwise overwrite
+# the record of what is actually deployed on testnet. Keep a copy of the real
+# one and put it back on the way out.
+REAL="$ROOT/contracts/deployments/$CHAIN_ID.json"
+if [ -f "$REAL" ]; then cp "$REAL" "$ROOT/contracts/deployments/$CHAIN_ID.remote.json"; fi
+trap 'if [ -f "$ROOT/contracts/deployments/'"$CHAIN_ID"'.remote.json" ]; then mv "$ROOT/contracts/deployments/'"$CHAIN_ID"'.remote.json" "$REAL"; fi; kill $ANVIL_PID 2>/dev/null || true' EXIT
+
 field() { node -e "process.stdout.write(require('./deployments/$CHAIN_ID.json').$1)"; }
 LAUNCHPAD=$(field launchpad)
 ROUTER=$(field swapRouter)
