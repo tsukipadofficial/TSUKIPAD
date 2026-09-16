@@ -48,7 +48,7 @@ contract AttackTest is TsukiTestBase {
         vm.prank(creator);
         (address a,) = launchpad.launch(ArcLaunchpad.LaunchParams({
             name: "Vic", symbol: "VIC", metadataURI: "", totalSupply: SUPPLY, salt: salt,
-            tickLower: TICK_LOWER, tickUpper: TICK_UPPER, creatorAllocationBps: 1_000,
+            tickLower: TICK_LOWER, tickUpper: TICK_UPPER, devBuyUsdc: 0,
             rewardHolders: rewards, feeRecipient: address(0), buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
                 referrer: address(0),
@@ -256,10 +256,12 @@ contract AttackTest is TsukiTestBase {
     function test_genuineTopUpStillCreditsHolders() public {
         LaunchToken t = _launch(true);
         _buy(holder, address(t), 20_000e6);
+        // A creator is handed nothing at launch, so to be a holder here they buy
+        // on the open market like anyone else -- which is the point of the test:
+        // a top-up is split by holdings, and a creator's holdings are bought.
+        usdc.mint(creator, 5_000e6);
+        _buy(creator, address(t), 5_000e6);
         launchpad.collectFees(address(t));
-
-        // The creator's allocation is delivered at launch, so the creator is a
-        // holder too and takes their pro-rata share of any top-up.
         uint256 holderBefore = t.pendingRewards(holder);
         uint256 creatorBefore = t.pendingRewards(creator);
 

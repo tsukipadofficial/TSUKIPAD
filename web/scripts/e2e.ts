@@ -86,7 +86,7 @@ async function main() {
   });
   const tickLower = startTickForMarketCap(3_000, supply);
   const tickUpper = ceilingTick(tickLower, DEFAULT_CEILING_MULTIPLE);
-  const ALLOCATION_BPS = 1_000; // 10%, to exercise the creator lock
+  const DEV_BUY = parseUnits(process.env.DEV_BUY_USDC ?? "2", 6); // bought, not minted
 
   const initCodeHash = (await pub.readContract({
     address: LAUNCHPAD, abi: launchpadAbi, functionName: "tokenInitCodeHash",
@@ -94,11 +94,19 @@ async function main() {
   })) as Hex;
   const { salt, token: predicted, attempts } = mineSalt(TOKEN_DEPLOYER, account.address, initCodeHash);
 
+  // The pad pulls the developer buy during `launch`, so allow it first.
+  if (DEV_BUY > 0n) {
+    const approveHash = await wallet.writeContract({
+      address: USDC, abi: erc20Abi, functionName: "approve", args: [LAUNCHPAD, DEV_BUY],
+    });
+    await pub.waitForTransactionReceipt({ hash: approveHash });
+  }
+
   let hash = await wallet.writeContract({
     address: LAUNCHPAD, abi: launchpadAbi, functionName: "launch",
     args: [{
       name, symbol, metadataURI, totalSupply: supplyWei, salt,
-      tickLower, tickUpper, creatorAllocationBps: ALLOCATION_BPS,
+      tickLower, tickUpper, devBuyUsdc: DEV_BUY,
       rewardHolders: false, feeRecipient: "0x0000000000000000000000000000000000000000",
       buybackAndBurn: false,
         recipientCommitment: ("0x" + "0".repeat(64)) as `0x${string}`,
@@ -137,8 +145,10 @@ async function main() {
     pub.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [LAUNCHPAD] }) as Promise<bigint>,
   ]);
   check("supply is 1,000,000,000", total === supplyWei);
-  check("90% seeded into the pool", inPool > (supplyWei * 89n) / 100n, tok(inPool));
-  check("10% allocation delivered at launch, launchpad holds none", heldByPad === 0n, tok(heldByPad));
+  // Every token is seeded now; what leaves is only the dev buy and the
+  // mint's rounding dust, so the pool still holds almost all of it.
+  check("the whole supply went into the pool", inPool > (supplyWei * 99n) / 100n, tok(inPool));
+  check("dev buy delivered at launch, launchpad holds none", heldByPad === 0n, tok(heldByPad));
   const onchainMeta = (await pub.readContract({ address: token, abi: launchTokenAbi, functionName: "metadataURI" })) as string;
   const managerUsdcAfterLaunch = (await pub.readContract({
     address: USDC, abi: erc20Abi, functionName: "balanceOf", args: [MANAGER],
@@ -146,10 +156,15 @@ async function main() {
   const decoded = decodeMetadata(onchainMeta);
   check("metadata readable on-chain", decoded.twitter === "@tsukipad_" && !!decoded.telegram, `${onchainMeta.length} bytes`);
   // The manager holds every pool's balances, so this is what *this* launch's
-  // pool is owed rather than what the manager happens to hold overall.
+  // pool gained rather than what the manager happens to hold overall.
+  //
+  // The liquidity itself is still seeded single-sided -- nobody has to put up
+  // USDC to open a launch. The only USDC here is the creator's own developer
+  // buy, which is a trade against the pool rather than part of the seeding, and
+  // it stays in the pool as the first money anyone can sell back into.
   check(
-    "pool opens single-sided: no USDC needed from anyone",
-    managerUsdcAfterLaunch === managerUsdcBeforeLaunch,
+    "the only USDC in the pool is the developer buy",
+    managerUsdcAfterLaunch - managerUsdcBeforeLaunch === DEV_BUY,
     usd(managerUsdcAfterLaunch - managerUsdcBeforeLaunch),
   );
 

@@ -87,7 +87,7 @@ async function launch(mode: Mode, project: Address): Promise<Address> {
     address: LAUNCHPAD, abi: launchpadAbi, functionName: "launch",
     args: [{
       name, symbol, metadataURI: uri, totalSupply: supplyWei, salt, tickLower, tickUpper,
-      creatorAllocationBps: 0,
+      devBuyUsdc: 0n,
       rewardHolders,
       feeRecipient: mode === "project" ? project : ("0x0000000000000000000000000000000000000000" as Address),
       buybackAndBurn: mode === "burn",

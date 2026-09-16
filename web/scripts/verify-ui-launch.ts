@@ -105,7 +105,7 @@ async function main() {
         salt,
         tickLower,
         tickUpper,
-        creatorAllocationBps: 0,
+        devBuyUsdc: 0n,
         rewardHolders: false,
         feeRecipient: "0x0000000000000000000000000000000000000000",
         buybackAndBurn: false,

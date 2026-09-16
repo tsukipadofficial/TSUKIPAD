@@ -55,7 +55,7 @@ contract ReferralTest is TsukiTestBase {
                 salt: salt,
                 tickLower: TICK_LOWER,
                 tickUpper: TICK_UPPER,
-                creatorAllocationBps: 0,
+                devBuyUsdc: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
@@ -169,7 +169,7 @@ contract ReferralTest is TsukiTestBase {
         }
         ArcLaunchpad.LaunchParams memory params = ArcLaunchpad.LaunchParams({
             name: "Self", symbol: "SELF", metadataURI: "", totalSupply: SUPPLY, salt: salt,
-            tickLower: TICK_LOWER, tickUpper: TICK_UPPER, creatorAllocationBps: 0,
+            tickLower: TICK_LOWER, tickUpper: TICK_UPPER, devBuyUsdc: 0,
             rewardHolders: false, feeRecipient: address(0), buybackAndBurn: false,
             recipientCommitment: bytes32(0), referrer: creator,
                 creatorTaxBps: 0

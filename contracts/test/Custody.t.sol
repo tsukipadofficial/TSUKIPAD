@@ -52,7 +52,7 @@ contract CustodyTest is TsukiTestBase {
         usdc.mint(alice, 2_000_000e6);
     }
 
-    function _launch(string memory name, string memory sym, uint16 allocBps, bytes32 commitment)
+    function _launch(string memory name, string memory sym, uint256 devBuyUsdc, bytes32 commitment)
         internal
         returns (LaunchToken token)
     {
@@ -62,6 +62,11 @@ contract CustodyTest is TsukiTestBase {
                 salt = bytes32(i);
                 break;
             }
+        }
+        if (devBuyUsdc > 0) {
+            usdc.mint(creator, devBuyUsdc);
+            vm.prank(creator);
+            usdc.approve(address(launchpad), devBuyUsdc);
         }
         vm.prank(creator);
         (address t,) = launchpad.launch(
@@ -73,7 +78,7 @@ contract CustodyTest is TsukiTestBase {
                 salt: salt,
                 tickLower: TICK_LOWER,
                 tickUpper: TICK_UPPER,
-                creatorAllocationBps: allocBps,
+                devBuyUsdc: devBuyUsdc,
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
@@ -165,8 +170,8 @@ contract CustodyTest is TsukiTestBase {
     // ------------------------------------------------------------------
 
     function test_escrowedTokensAreUntouchedByFeeActivityAnywhere() public {
-        LaunchToken held = _launch("Held", "HELD", 1_000, COMMITMENT);
-        LaunchToken busy = _launch("Busy", "BUSY", 1_000, bytes32(0));
+        LaunchToken held = _launch("Held", "HELD", 1_000e6, COMMITMENT);
+        LaunchToken busy = _launch("Busy", "BUSY", 1_000e6, bytes32(0));
 
         uint256 owed = _escrowTokenFees(held);
         _assertSolvent(held, "solvent once escrow accrues");
@@ -229,7 +234,7 @@ contract CustodyTest is TsukiTestBase {
 
     function test_feesAreNotDrawnFromCustodiedBalances() public {
         // An earmarked launch holding token escrow, then churned hard.
-        LaunchToken token = _launch("Both", "BOTH", 1_500, COMMITMENT);
+        LaunchToken token = _launch("Both", "BOTH", 1_500e6, COMMITMENT);
         _escrowTokenFees(token);
 
         for (uint256 i = 0; i < 3; i++) {
@@ -252,7 +257,7 @@ contract CustodyTest is TsukiTestBase {
     ///      produced; the escrowed tokens are the recipient's and stay whole
     ///      until they claim.
     function test_escrowStaysWholeWhileItsOwnTokenIsSold() public {
-        LaunchToken token = _launch("Escrow Earner", "EERN", 1_000, COMMITMENT);
+        LaunchToken token = _launch("Escrow Earner", "EERN", 1_000e6, COMMITMENT);
         uint256 escrowed = _escrowTokenFees(token);
 
         // Trade hard, then collect. Collection sells this launch's token fees.

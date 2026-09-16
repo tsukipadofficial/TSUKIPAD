@@ -51,7 +51,7 @@ contract RouterPartialFillTest is TsukiTestBase {
                 salt: salt,
                 tickLower: TICK_LOWER,
                 tickUpper: TICK_UPPER,
-                creatorAllocationBps: 0,
+                devBuyUsdc: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,

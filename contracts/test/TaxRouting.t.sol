@@ -61,7 +61,7 @@ contract TaxRoutingTest is TsukiTestBase {
                 salt: salt,
                 tickLower: TICK_LOWER,
                 tickUpper: TICK_UPPER,
-                creatorAllocationBps: 0,
+                devBuyUsdc: 0,
                 rewardHolders: rewardHolders,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
@@ -141,7 +141,7 @@ contract TaxRoutingTest is TsukiTestBase {
             salt: salt,
             tickLower: -887_200,
             tickUpper: -444_400, // floors the liquidity to zero
-            creatorAllocationBps: 0,
+            devBuyUsdc: 0,
             rewardHolders: false,
             feeRecipient: address(0),
             buybackAndBurn: false,

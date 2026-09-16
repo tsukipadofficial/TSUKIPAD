@@ -76,7 +76,7 @@ async function main() {
     address: LAUNCHPAD, abi: launchpadAbi, functionName: "launch",
     args: [{
       name: NAME, symbol: SYMBOL, metadataURI, totalSupply: totalSupplyWei, salt,
-      tickLower, tickUpper, creatorAllocationBps: 0,
+      tickLower, tickUpper, devBuyUsdc: 0n,
       rewardHolders: false,
       feeRecipient: "0x0000000000000000000000000000000000000000",
       buybackAndBurn: false,

@@ -93,7 +93,7 @@ contract ArcLaunchpadTest is TsukiTestBase {
                 salt: salt,
                 tickLower: TICK_LOWER,
                 tickUpper: TICK_UPPER,
-                creatorAllocationBps: 0,
+                devBuyUsdc: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
@@ -180,7 +180,7 @@ contract ArcLaunchpadTest is TsukiTestBase {
                 salt: badSalt,
                 tickLower: TICK_LOWER,
                 tickUpper: TICK_UPPER,
-                creatorAllocationBps: 0,
+                devBuyUsdc: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
@@ -204,7 +204,7 @@ contract ArcLaunchpadTest is TsukiTestBase {
                 salt: salt,
                 tickLower: TICK_LOWER + 1,
                 tickUpper: TICK_UPPER,
-                creatorAllocationBps: 0,
+                devBuyUsdc: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
@@ -215,29 +215,6 @@ contract ArcLaunchpadTest is TsukiTestBase {
         );
     }
 
-    function test_launch_capsCreatorAllocation() public {
-        bytes32 salt = _mineSalt(creator, "Degen", "DEGEN", "ipfs://meta");
-        vm.prank(creator);
-        vm.expectRevert(ArcLaunchpad.AllocationTooLarge.selector);
-        launchpad.launch(
-            ArcLaunchpad.LaunchParams({
-                name: "Degen",
-                symbol: "DEGEN",
-                metadataURI: "ipfs://meta",
-                totalSupply: SUPPLY,
-                salt: salt,
-                tickLower: TICK_LOWER,
-                tickUpper: TICK_UPPER,
-                creatorAllocationBps: 2_001,
-                rewardHolders: false,
-                feeRecipient: address(0),
-                buybackAndBurn: false,
-                recipientCommitment: bytes32(0),
-                referrer: address(0),
-                creatorTaxBps: 0
-            })
-        );
-    }
 
     // ------------------------------------------------------------------
     // Trading
@@ -367,7 +344,7 @@ contract ArcLaunchpadTest is TsukiTestBase {
                 salt: salt,
                 tickLower: TICK_LOWER,
                 tickUpper: TICK_UPPER,
-                creatorAllocationBps: 0,
+                devBuyUsdc: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
@@ -417,7 +394,7 @@ contract ArcLaunchpadTest is TsukiTestBase {
                 salt: salt,
                 tickLower: TICK_LOWER,
                 tickUpper: TICK_UPPER,
-                creatorAllocationBps: 0,
+                devBuyUsdc: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
@@ -510,7 +487,7 @@ contract ArcLaunchpadTest is TsukiTestBase {
                 salt: salt2,
                 tickLower: TICK_LOWER,
                 tickUpper: TICK_UPPER,
-                creatorAllocationBps: 0,
+                devBuyUsdc: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
@@ -528,7 +505,58 @@ contract ArcLaunchpadTest is TsukiTestBase {
         assertEq(launchpad.launchOf(t1).creator, creator);
     }
 
-    function test_creatorAllocationIsDeliveredAtLaunch() public {
+
+
+    /// @dev Nothing is minted to a creator for free. A creator who wants supply
+    ///      buys it from their own pool, in the launch transaction, at the price
+    ///      the first outside buyer would have paid -- so the bag costs real
+    ///      money, and that money stays in the pool behind it.
+    function test_devBuyIsPaidForAndDelivered() public {
+        bytes32 salt = _mineSalt(creator, "Alloc", "ALC", "");
+        uint256 spend = 5_000e6;
+        usdc.mint(creator, spend);
+        vm.prank(creator);
+        usdc.approve(address(launchpad), spend);
+
+        uint256 usdcBefore = usdc.balanceOf(creator);
+        uint256 poolUsdcBefore = usdc.balanceOf(address(manager));
+        vm.prank(creator);
+        (address token,) = launchpad.launch(
+            ArcLaunchpad.LaunchParams({
+                name: "Alloc",
+                symbol: "ALC",
+                metadataURI: "",
+                totalSupply: SUPPLY,
+                salt: salt,
+                tickLower: TICK_LOWER,
+                tickUpper: TICK_UPPER,
+                devBuyUsdc: spend,
+                rewardHolders: false,
+                feeRecipient: address(0),
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0),
+                referrer: address(0),
+                creatorTaxBps: 0
+            })
+        );
+
+        uint256 held = IERC20(token).balanceOf(creator);
+        assertGt(held, 0, "the creator received the supply they bought");
+        assertEq(usdcBefore - usdc.balanceOf(creator), spend, "and paid for every cent of it");
+        assertEq(launchpad.launchOf(token).creatorAllocation, held, "the record matches the bag");
+        assertEq(IERC20(token).balanceOf(address(launchpad)), 0, "the pad keeps none of the token");
+        assertEq(IERC20(USDC_ADDR).balanceOf(address(launchpad)), 0, "nor any of the money");
+        // The USDC they spent is the pool's now, which is what makes a launch
+        // sellable into from its first block instead of holding no cash at all.
+        assertApproxEqRel(
+            usdc.balanceOf(address(manager)) - poolUsdcBefore, spend, 0.01e18, "the money stayed in the pool"
+        );
+        assertEq(held + IERC20(token).balanceOf(address(manager)), SUPPLY, "every token is accounted for");
+    }
+
+    /// @dev The default: no dev buy, so the creator starts with none of it and
+    ///      every token sits in the pool at one price for everybody.
+    function test_withoutADevBuyTheCreatorHoldsNothing() public {
         bytes32 salt = _mineSalt(creator, "Alloc", "ALC", "");
         vm.prank(creator);
         (address token,) = launchpad.launch(
@@ -540,7 +568,7 @@ contract ArcLaunchpadTest is TsukiTestBase {
                 salt: salt,
                 tickLower: TICK_LOWER,
                 tickUpper: TICK_UPPER,
-                creatorAllocationBps: 1_000, // 10%
+                devBuyUsdc: 0,
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
@@ -550,47 +578,12 @@ contract ArcLaunchpadTest is TsukiTestBase {
             })
         );
 
-        // No lock: the allocation is the creator's the moment the launch lands.
-        // Buyers see it on the launch record before they buy.
-        assertApproxEqRel(IERC20(token).balanceOf(creator), SUPPLY / 10, 0.001e18, "creator holds ~10% at launch");
-    }
-
-    /// @dev The launchpad keeps nothing back. Everything not seeded into the
-    ///      pool -- the allocation and the mint's rounding dust -- leaves in the
-    ///      launch transaction itself, so there is no custodied allocation left
-    ///      for fee handling or anyone else to reach.
-    function test_launchLeavesNoAllocationBehind() public {
-        bytes32 salt = _mineSalt(creator, "Alloc", "ALC", "");
-        vm.prank(creator);
-        (address token, PoolId pool) = launchpad.launch(
-            ArcLaunchpad.LaunchParams({
-                name: "Alloc",
-                symbol: "ALC",
-                metadataURI: "",
-                totalSupply: SUPPLY,
-                salt: salt,
-                tickLower: TICK_LOWER,
-                tickUpper: TICK_UPPER,
-                creatorAllocationBps: 2_000, // the maximum
-                rewardHolders: false,
-                feeRecipient: address(0),
-                buybackAndBurn: false,
-                recipientCommitment: bytes32(0),
-                referrer: address(0),
-                creatorTaxBps: 0
-            })
-        );
-
-        uint256 allocation = launchpad.launchOf(token).creatorAllocation;
-        assertEq(allocation, SUPPLY / 5, "allocation recorded");
-
-        // Only dust on top of the allocation, never less than it.
+        // Only the mint's rounding dust, which the pad refuses to exceed.
         uint256 held = IERC20(token).balanceOf(creator);
-        assertGe(held, allocation, "creator received the whole allocation");
-        assertApproxEqRel(held, allocation, 0.001e18, "and nothing but dust besides");
-
-        assertEq(IERC20(token).balanceOf(address(launchpad)), 0, "launchpad holds none of the token");
-        assertEq(held + IERC20(token).balanceOf(address(manager)), SUPPLY, "supply is split between creator and pool");
+        assertLt(held, SUPPLY / 1_000, "the creator was handed nothing but dust");
+        assertEq(launchpad.launchOf(token).creatorAllocation, held, "and the record says so");
+        assertEq(IERC20(token).balanceOf(address(launchpad)), 0, "the pad holds none of the token");
+        assertEq(held + IERC20(token).balanceOf(address(manager)), SUPPLY, "every token is accounted for");
     }
 
     // ---------------- attribution ----------------

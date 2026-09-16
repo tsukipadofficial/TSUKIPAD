@@ -64,7 +64,6 @@ export default function CreatePage() {
   const [twitter, setTwitter] = useState("");
   const [telegram, setTelegram] = useState("");
 
-  const [allocationPct, setAllocationPct] = useState(0);
   /// Where the creator's half of swap fees goes. Immutable once launched, so
   /// this is surfaced as an explicit choice rather than a buried setting.
   const [feeMode, setFeeMode] = useState<"creator" | "holders" | "redirect" | "burn">("creator");
@@ -236,7 +235,8 @@ export default function CreatePage() {
     // creatorTaxOk applies to both launch types: the tax is charged by the same
     // hook either way, and it was previously only checked on the curve path.
     creatorTaxOk &&
-    (onCurve ? !!curveConfig && curveWalletValid && devBuyOk : isDeployed && recipientValid) &&
+    devBuyOk &&
+    (onCurve ? !!curveConfig && curveWalletValid : isDeployed && recipientValid) &&
     isConnected &&
     !wrongChain &&
     nameOk &&
@@ -346,6 +346,27 @@ export default function CreatePage() {
       const { salt, token, attempts } = mineSalt(TOKEN_DEPLOYER_ADDRESS, address, initCodeHash);
       setStatus(t("status.found", { addr: token.slice(0, 10), n: attempts }));
 
+      // The pad pulls the developer buy out of the creator's wallet inside
+      // `launch`, so it needs an allowance first -- same as the curve path.
+      if (devBuyWei > 0n) {
+        const allowance = (await publicClient.readContract({
+          address: USDC_ADDRESS,
+          abi: erc20Abi,
+          functionName: "allowance",
+          args: [address, LAUNCHPAD_ADDRESS],
+        })) as bigint;
+        if (allowance < devBuyWei) {
+          setStatus(t("status.approving"));
+          const approveHash = await writeContractAsync({
+            address: USDC_ADDRESS,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [LAUNCHPAD_ADDRESS, devBuyWei],
+          });
+          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        }
+      }
+
       const hash = await writeContractAsync({
         address: LAUNCHPAD_ADDRESS,
         abi: launchpadAbi,
@@ -359,7 +380,7 @@ export default function CreatePage() {
             salt,
             tickLower,
             tickUpper,
-            creatorAllocationBps: Math.round(allocationPct * 100),
+            devBuyUsdc: devBuyWei,
             // The hook charges this on every swap for as long as the token
             // trades -- buys and sells alike, before and after graduation.
             creatorTaxBps,
@@ -539,36 +560,6 @@ export default function CreatePage() {
 
             {onCurve ? (
               <>
-                <Field
-                  label={t("curve.devBuy")}
-                  optional
-                  hint={t("curve.devBuy.hint", {
-                    bal: usdcFloat.toLocaleString("en-US", { maximumFractionDigits: 2 }),
-                  })}
-                >
-                  <div
-                    className={cx(
-                      "flex items-center border-2 bg-void focus-within:border-lime",
-                      devBuyOk ? "border-line" : "border-pink",
-                    )}
-                  >
-                    <input
-                      value={devBuy}
-                      onChange={(e) => setDevBuy(e.target.value)}
-                      placeholder="0.00"
-                      inputMode="decimal"
-                      className="tabular w-full bg-transparent px-3 py-2.5 text-lg font-bold outline-none placeholder:text-faint"
-                    />
-                    <span className="tabular px-2 text-sm text-muted">USDC</span>
-                    <button
-                      type="button"
-                      onClick={() => setDevBuy(usdcFloat > 0 ? usdcFloat.toString() : "")}
-                      className="mr-2 border-2 border-lime px-2 py-0.5 text-xs font-bold text-lime hover:bg-lime hover:text-void"
-                    >
-                      {t("curve.max")}
-                    </button>
-                  </div>
-                </Field>
                 {devBuyGraduates ? (
                   <p className="border-2 border-cyan p-2 text-xs text-cyan">{t("curve.devBuy.graduates")}</p>
                 ) : null}
@@ -800,29 +791,36 @@ export default function CreatePage() {
               ) : null}
             </div>
 
-            <Field
-              label={t("field.allocation", { pct: allocationPct })}
-              hint={
-                allocationPct === 0
-                  ? t("field.allocation.none")
-                  : t("field.allocation.some", {
-                      amount: (Number(supply) * allocationPct) / 100 / 1e6,
-                    })
-              }
-            >
-              <input
-                type="range"
-                min={0}
-                max={20}
-                step={1}
-                value={allocationPct}
-                onChange={(e) => setAllocationPct(Number(e.target.value))}
-                className={cx(
-                  "h-2 w-full cursor-pointer appearance-none bg-line",
-                  allocationPct > 10 ? "accent-pink" : "accent-lime",
-                )}
-              />
-            </Field>
+                <Field
+                  label={t("curve.devBuy")}
+                  optional
+                  hint={t(onCurve ? "curve.devBuy.hint" : "direct.devBuy.hint", {
+                    bal: usdcFloat.toLocaleString("en-US", { maximumFractionDigits: 2 }),
+                  })}
+                >
+                  <div
+                    className={cx(
+                      "flex items-center border-2 bg-void focus-within:border-lime",
+                      devBuyOk ? "border-line" : "border-pink",
+                    )}
+                  >
+                    <input
+                      value={devBuy}
+                      onChange={(e) => setDevBuy(e.target.value)}
+                      placeholder="0.00"
+                      inputMode="decimal"
+                      className="tabular w-full bg-transparent px-3 py-2.5 text-lg font-bold outline-none placeholder:text-faint"
+                    />
+                    <span className="tabular px-2 text-sm text-muted">USDC</span>
+                    <button
+                      type="button"
+                      onClick={() => setDevBuy(usdcFloat > 0 ? usdcFloat.toString() : "")}
+                      className="mr-2 border-2 border-lime px-2 py-0.5 text-xs font-bold text-lime hover:bg-lime hover:text-void"
+                    >
+                      {t("curve.max")}
+                    </button>
+                  </div>
+                </Field>
               </>
             )}
           </div>

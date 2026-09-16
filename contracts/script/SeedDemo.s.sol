@@ -91,7 +91,7 @@ contract SeedDemo is Script {
                 salt: salt,
                 tickLower: d.tickLower,
                 tickUpper: d.tickUpper,
-                creatorAllocationBps: allocationBps,
+                devBuyUsdc: 0,
                 rewardHolders: d.rewardHolders,
                 feeRecipient: d.feeRecipient,
                 buybackAndBurn: false,

@@ -87,7 +87,7 @@ export async function GET(req: Request) {
   }
 
   const client = indexerClient();
-  const cacheKey = `tape:v4:${(pool ?? "").toLowerCase()}:${(token ?? "").toLowerCase()}`;
+  const cacheKey = `tape:v5:${(pool ?? "").toLowerCase()}:${(token ?? "").toLowerCase()}`;
 
   try {
     // Typed through helpers rather than inline: `getLogs` only narrows its

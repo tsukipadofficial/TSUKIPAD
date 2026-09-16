@@ -189,12 +189,6 @@ const STRINGS = {
     ja: "SNSアカウントとウォレットの所有関係は証明できないため、この表記はあくまで自己申告です。受取アドレスは常に併記されます。",
   },
 
-  "field.allocation": { en: "Creator allocation — {pct}%", ja: "発行者の取り分 — {pct}%" },
-  "field.allocation.none": { en: "Nothing withheld. The purest fair launch.", ja: "留保なし。最も公平な発行方式です。" },
-  "field.allocation.some": {
-    en: "You keep {amount}M tokens, sent to your wallet at launch. Buyers can see this.",
-    ja: "{amount}Mトークンを留保し、発行時にウォレットへ送られます。購入者からも確認できます。",
-  },
 
   // --- bonding curve -------------------------------------------------
   "create.type": { en: "Launch type", ja: "発行方式" },
@@ -212,6 +206,10 @@ const STRINGS = {
   "curve.devBuy.hint": {
     en: "{bal} USDC available. Bought in the launch transaction, free of the snipe tax.",
     ja: "利用可能: {bal} USDC。発行トランザクション内で購入され、スナイプ税はかかりません。",
+  },
+  "direct.devBuy.hint": {
+    en: "{bal} USDC available. Buys your own supply from the pool at the opening price, in the launch transaction. Nothing is minted to you for free.",
+    ja: "利用可能: {bal} USDC。発行トランザクション内で、開始価格でプールから自分の供給分を購入します。無償の割り当てはありません。",
   },
   "curve.devBuy.graduates": {
     en: "This buys out the whole curve: the launch graduates in the same transaction.",

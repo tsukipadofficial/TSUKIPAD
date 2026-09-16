@@ -68,7 +68,6 @@ contract ArcLaunchpad is TsukiV4Pool, ReentrancyGuard {
     int24 public immutable tickSpacing;
 
     /// @notice Hard ceiling on the share of supply a creator may keep, in bps.
-    uint16 public constant MAX_CREATOR_ALLOCATION_BPS = 2_000; // 20%
 
     /// @notice Hard ceiling on the protocol's share of swap fees, in bps.
     /// @dev Without this the owner could set the split to 100% and seize every
@@ -229,7 +228,6 @@ contract ArcLaunchpad is TsukiV4Pool, ReentrancyGuard {
     error PoolExists();
     error TickOrder();
     error TickAlignment();
-    error AllocationTooLarge();
     error ZeroSupply();
     error UnauthorizedCallback();
     error UnexpectedUsdcOwed();
@@ -297,8 +295,11 @@ contract ArcLaunchpad is TsukiV4Pool, ReentrancyGuard {
         int24 tickLower;
         /// @dev Top of the liquidity range. Sets how concentrated the curve is.
         int24 tickUpper;
-        /// @dev Share of supply withheld from the pool for the creator, in bps.
-        uint16 creatorAllocationBps;
+        /// @dev USDC the creator spends buying their own supply at launch, in the
+        ///      same transaction and at the opening price. Nothing is withheld
+        ///      from the pool for them: a creator's bag is bought, never minted.
+        ///      Zero means they launch holding none of it.
+        uint256 devBuyUsdc;
         /// @dev If true, the creator's share of swap fees is paid to holders as
         ///      claimable USDC instead of to the creator. Immutable once launched.
         bool rewardHolders;
@@ -337,7 +338,6 @@ contract ArcLaunchpad is TsukiV4Pool, ReentrancyGuard {
     /// @return pool The Uniswap V3 pool now holding all launch liquidity.
     function launch(LaunchParams calldata params) external nonReentrant returns (address token, PoolId pool) {
         if (params.totalSupply == 0) revert ZeroSupply();
-        if (params.creatorAllocationBps > MAX_CREATOR_ALLOCATION_BPS) revert AllocationTooLarge();
         if (params.tickLower >= params.tickUpper) revert TickOrder();
         if (params.tickLower % tickSpacing != 0 || params.tickUpper % tickSpacing != 0) revert TickAlignment();
 
@@ -382,8 +382,9 @@ contract ArcLaunchpad is TsukiV4Pool, ReentrancyGuard {
         LaunchToken(token).setPool(address(poolManager));
 
         // --- seed single-sided liquidity ---------------------------------
-        uint256 creatorAmount = (params.totalSupply * params.creatorAllocationBps) / 10_000;
-        uint256 liquiditySupply = params.totalSupply - creatorAmount;
+        // Every token goes into the pool. A creator who wants supply buys it
+        // below, with money, at the price the first outside buyer would pay.
+        uint256 liquiditySupply = params.totalSupply;
 
         (uint256 spent0, uint256 spent1, uint128 liquidity) =
             _mintLocked(key, params.tickLower, params.tickUpper, liquiditySupply, 0);
@@ -392,14 +393,35 @@ contract ArcLaunchpad is TsukiV4Pool, ReentrancyGuard {
         if (spent1 != 0) revert UnexpectedUsdcOwed();
         if (spent0 > liquiditySupply) revert LiquidityCostExceedsBudget();
 
-        // Everything except the declared allocation has to actually reach the
-        // pool. Liquidity is computed from the range, and for an extreme enough
-        // range the rounding keeps a real share of the supply instead of dust --
-        // which would hand the creator supply the launch says they do not have,
-        // with `creatorAllocation` still reporting the declared figure. A launch
-        // that cannot place its liquidity is refused rather than quietly skewed.
+        // The whole supply has to actually reach the pool. Liquidity is computed
+        // from the range, and for an extreme enough range the rounding keeps a
+        // real share of the supply instead of dust -- which would hand the
+        // creator supply nobody paid for. A launch that cannot place its
+        // liquidity is refused rather than quietly skewed.
         if (liquidity == 0) revert NoLiquidityPlaced();
         if (liquiditySupply - spent0 > liquiditySupply / 1_000) revert TooMuchSupplyUnplaced();
+
+        // --- developer buy -----------------------------------------------
+        // The creator gets no free supply. If they want a bag they buy it here,
+        // from their own pool, at the opening price -- and the USDC they pay
+        // stays in the pool, which is also the first money anyone else can sell
+        // back into. Scoped so these locals do not survive into the rest of the
+        // function, which is already at the stack limit under via-ir.
+        if (params.devBuyUsdc > 0) {
+            IERC20(USDC).safeTransferFrom(msg.sender, address(this), params.devBuyUsdc);
+            // Stopped at the top of the range for the same reason a buy-back is:
+            // above it there is no liquidity, so an unbounded buy would spend
+            // less than it was handed and strand the difference here.
+            (uint256 devSpent,) = _swapExactIn(
+                key, false, params.devBuyUsdc, TickMath.getSqrtRatioAtTick(params.tickUpper)
+            );
+            uint256 devUnspent = params.devBuyUsdc - devSpent;
+            if (devUnspent > 0) IERC20(USDC).safeTransfer(msg.sender, devUnspent);
+        }
+
+        // Whatever the pad holds now is the creator's: what the dev buy bought,
+        // plus the rounding dust the mint left behind.
+        uint256 creatorAmount = IERC20(token).balanceOf(address(this));
 
         // --- record ------------------------------------------------------
         launches.push(
@@ -433,11 +455,10 @@ contract ArcLaunchpad is TsukiV4Pool, ReentrancyGuard {
             referralOf[token] = Referral({referrer: params.referrer, bps: referralFeeBps});
         }
 
-        // The allocation, plus the rounding dust left over from the mint, goes
-        // to the creator now. Buyers can see the allocation on the launch before
-        // they buy, which is the protection that matters.
-        uint256 remainder = IERC20(token).balanceOf(address(this));
-        if (remainder > 0) IERC20(token).safeTransfer(msg.sender, remainder);
+        // The bought supply and the mint's dust go to the creator now.
+        // `creatorAllocation` records it, so buyers can see exactly how much of
+        // the supply the creator holds before they buy.
+        if (creatorAmount > 0) IERC20(token).safeTransfer(msg.sender, creatorAmount);
 
         emit Launched(
             token,
