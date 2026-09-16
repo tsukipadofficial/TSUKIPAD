@@ -46,6 +46,14 @@ contract TsukiRouter is IUnlockCallback {
         uint256 amountOut
     );
 
+    /// @dev What a swap actually moved: `spent` is the input the pool took,
+    ///      which is less than what was offered when the pool ran out of
+    ///      liquidity inside the price limit and the rest was refunded.
+    struct SwapResult {
+        uint256 received;
+        uint256 spent;
+    }
+
     error NotPoolManager();
     error Expired();
     error Slippage();
@@ -74,15 +82,16 @@ contract TsukiRouter is IUnlockCallback {
         Currency input = params.zeroForOne ? params.key.currency0 : params.key.currency1;
         IERC20(Currency.unwrap(input)).safeTransferFrom(msg.sender, address(this), params.amountIn);
 
-        bytes memory out = poolManager.unlock(abi.encode(params, msg.sender));
-        amountOut = abi.decode(out, (uint256));
+        SwapResult memory r = abi.decode(poolManager.unlock(abi.encode(params, msg.sender)), (SwapResult));
+        amountOut = r.received;
 
         if (amountOut == 0) revert NothingOut();
         if (amountOut < params.amountOutMinimum) revert Slippage();
 
-        emit Swapped(
-            params.key.toId(), msg.sender, params.recipient, params.zeroForOne, params.amountIn, amountOut
-        );
+        // `spent`, not `params.amountIn`: a partial fill refunds the remainder,
+        // and reporting the offer as the trade would overstate the tape, every
+        // volume figure built from it, and the trader's own position.
+        emit Swapped(params.key.toId(), msg.sender, params.recipient, params.zeroForOne, r.spent, amountOut);
     }
 
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
@@ -119,6 +128,6 @@ contract TsukiRouter is IUnlockCallback {
         uint256 refund = p.amountIn - spent;
         if (refund > 0) IERC20(Currency.unwrap(inC)).safeTransfer(payer, refund);
 
-        return abi.encode(received);
+        return abi.encode(SwapResult({received: received, spent: spent}));
     }
 }
