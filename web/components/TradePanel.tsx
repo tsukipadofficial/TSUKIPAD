@@ -335,7 +335,11 @@ export function TradePanel({ launch }: { launch: LaunchView }) {
         </div>
 
         {quoteError && amountIn > 0n ? (
-          <p className="text-xs text-amber">{t("trade.quoteUnavailable")}</p>
+          <p className="text-xs text-amber">
+            {side === "sell" && launch.curveProgress <= 0
+              ? t("trade.nothingToSellInto")
+              : t("trade.quoteUnavailable")}
+          </p>
         ) : null}
 
         {soldOut && side === "buy" ? (

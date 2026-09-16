@@ -11,10 +11,11 @@
 /// escrow releases on claim, and referral payments -- so a new payout route
 /// cannot quietly go unranked.
 
-import { createPublicClient, http, parseAbiItem, type Address } from "viem";
+import { parseAbiItem, type Address } from "viem";
 
 import { launchpadAbi } from "./abi";
-import { LAUNCHPAD_ADDRESS, USDC_ADDRESS, INDEXER_RPC_URL, chain } from "./config";
+import { LAUNCHPAD_ADDRESS, USDC_ADDRESS } from "./config";
+import { indexerClient } from "./indexer-rpc";
 import { cmd, pipeline } from "./redis";
 
 export const TRANSFER_EVENT = parseAbiItem(
@@ -30,7 +31,7 @@ export const EK = {
   board: "earn:board",
 };
 
-const client = () => createPublicClient({ chain, transport: http(INDEXER_RPC_URL) });
+const client = indexerClient;
 
 /// The treasury is paid on every single collection, so it would sit permanently
 /// at rank one on a board meant to celebrate creators. It is still readable on

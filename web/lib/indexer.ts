@@ -14,10 +14,11 @@
 /// router, say) still moves the price and still shows in the pool; it just does
 /// not land in anybody's position here.
 
-import { createPublicClient, http, parseAbiItem, type Address } from "viem";
+import { parseAbiItem, type Address } from "viem";
 
 import { curveAbi, launchpadAbi } from "./abi";
-import { CURVE_ADDRESS, LAUNCHPAD_ADDRESS, SWAP_ROUTER_ADDRESS, INDEXER_RPC_URL, chain, isCurveDeployed } from "./config";
+import { CURVE_ADDRESS, LAUNCHPAD_ADDRESS, SWAP_ROUTER_ADDRESS, isCurveDeployed } from "./config";
+import { indexerClient } from "./indexer-rpc";
 import { poolIdFor } from "./v4";
 import { cmd, pipeline } from "./redis";
 import { EMPTY, applyBuy, applySell, type Position } from "./pnl";
@@ -53,7 +54,7 @@ export const K = {
   volume: "lb:volume",
 };
 
-const client = () => createPublicClient({ chain, transport: http(INDEXER_RPC_URL) });
+const client = indexerClient;
 
 /// Addresses that trade but are not traders. The launchpad sells collected token
 /// fees for USDC on every collection, which is a real swap with a real profit,

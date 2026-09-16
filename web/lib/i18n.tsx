@@ -413,6 +413,7 @@ const STRINGS = {
   "trade.buySym": { en: "Buy {sym}", ja: "{sym}を買う" },
   "trade.sellSym": { en: "Sell {sym}", ja: "{sym}を売る" },
   "trade.wrongNetwork": { en: "Wrong network", ja: "ネットワークが違います" },
+  "trade.nothingToSellInto": { en: "Nothing to sell into yet — no one has bought, so the pool holds no USDC.", ja: "まだ売却できません。買い手がいないため、プールにUSDCがありません。" },
   "trade.quoteUnavailable": { en: "Quote unavailable — check balance and approval.", ja: "見積もりを取得できません。残高と承認をご確認ください。" },
   "trade.soldOut": {
     en: "The curve is fully bought out — there is no supply left in the range. You can still sell into it.",

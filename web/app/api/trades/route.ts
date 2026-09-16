@@ -12,19 +12,18 @@
 /// query on the one endpoint that answers it and puts a cache in front.
 
 import { NextResponse } from "next/server";
-import { createPublicClient, http, formatUnits, isAddress,
+import { formatUnits, isAddress,
   isHex, parseAbiItem, type Address } from "viem";
 
 import { SWAP_EVENT } from "@/lib/indexer";
 import {
   CURVE_ADDRESS,
-  INDEXER_RPC_URL,
   LAUNCHPAD_ADDRESS,
   SWAP_ROUTER_ADDRESS,
   TOKEN_DECIMALS,
   USDC_DECIMALS,
-  chain,
 } from "@/lib/config";
+import { indexerClient } from "@/lib/indexer-rpc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,7 +74,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "bad pool" }, { status: 400 });
   }
 
-  const client = createPublicClient({ chain, transport: http(INDEXER_RPC_URL) });
+  const client = indexerClient();
 
   try {
     // Typed through helpers rather than inline: `getLogs` only narrows its

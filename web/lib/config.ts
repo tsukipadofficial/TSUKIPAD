@@ -23,17 +23,28 @@ export const TICK_SPACING = 200;
 export const RPC_URL =
   process.env.NEXT_PUBLIC_RPC_URL ?? "https://rpc.testnet.arc.io";
 
-/// Server-side endpoint for log scanning, which is a different problem.
+/// Server-side endpoints for log scanning, which is a different problem.
 ///
-/// The indexer walks history in 20,000-block chunks. Alchemy's free tier caps
+/// The indexer walks history in 9,000-block chunks. Alchemy's free tier caps
 /// eth_getLogs at *ten* blocks, which at Arc's ~169,000 blocks a day would need
-/// ~16,900 calls per pool per day; Arc's own endpoint allows 20,000 per call.
-/// So the managed provider serves visitors and the public one serves the
+/// ~16,900 calls per pool per day; Arc's public endpoints allow 10,000 per
+/// call. So the managed provider serves visitors and the public ones serve the
 /// indexer, which is the reverse of what you would guess.
 ///
-/// Never NEXT_PUBLIC_: this one has no reason to reach a browser.
-export const INDEXER_RPC_URL =
-  process.env.INDEXER_RPC_URL ?? "https://rpc.testnet.arc.io";
+/// A list, not one URL: every public endpoint rate-limits on its own schedule,
+/// and a scan that hits a limit on one is simply retried on the next (see
+/// `indexerTransport`). INDEXER_RPC_URL may hold several, comma-separated;
+/// the chain's known public endpoints are always appended after it.
+///
+/// Never NEXT_PUBLIC_: these have no reason to reach a browser.
+const PUBLIC_LOG_RPCS: Record<number, string[]> = {
+  5042002: ["https://rpc.quicknode.testnet.arc.io", "https://rpc.testnet.arc.io"],
+  5042: ["https://rpc.mainnet.arc.io"],
+};
+export const INDEXER_RPC_URLS: string[] = Array.from(new Set([
+  ...(process.env.INDEXER_RPC_URL ?? "").split(",").map((u) => u.trim()).filter(Boolean),
+  ...(PUBLIC_LOG_RPCS[arcTestnet.id] ?? []),
+]));
 
 /// The chain, with its RPC pinned to RPC_URL.
 ///

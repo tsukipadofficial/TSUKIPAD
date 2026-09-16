@@ -5,11 +5,12 @@
 /// Everything needed to render a row -- name, symbol, image, live price, market
 /// cap -- comes from one multicall here rather than from each page separately.
 
-import { createPublicClient, http, type Address } from "viem";
+import { type Address } from "viem";
 
 import { launchpadAbi, launchTokenAbi, stateViewAbi } from "./abi";
 import { poolIdFor } from "./v4";
-import { LAUNCHPAD_ADDRESS, STATE_VIEW_ADDRESS, INDEXER_RPC_URL, chain } from "./config";
+import { LAUNCHPAD_ADDRESS, STATE_VIEW_ADDRESS } from "./config";
+import { indexerClient } from "./indexer-rpc";
 import { priceX18FromSqrt, marketCapFromSqrtPriceX96 } from "./launch-math";
 import { decodeMetadata, safeImageUrl } from "./metadata";
 
@@ -33,7 +34,7 @@ let cache: { at: number; map: Map<string, LaunchMeta> } | null = null;
 let inflight: Promise<Map<string, LaunchMeta>> | null = null;
 
 async function load(): Promise<Map<string, LaunchMeta>> {
-  const pub = createPublicClient({ chain, transport: http(INDEXER_RPC_URL) });
+  const pub = indexerClient();
 
   const launches = (await pub.readContract({
     address: LAUNCHPAD_ADDRESS,
