@@ -7,6 +7,7 @@ import {ArcLaunchpad} from "../src/ArcLaunchpad.sol";
 import {TsukiCurve} from "../src/TsukiCurve.sol";
 import {LaunchToken} from "../src/LaunchToken.sol";
 import {TsukiTestBase} from "./TsukiTestBase.sol";
+import {TsukiHook} from "../src/TsukiHook.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 import {Vm} from "forge-std/Vm.sol";
 
@@ -82,7 +83,7 @@ contract TaxRoutingTest is TsukiTestBase {
     function test_earmarkedLaunchTaxIsEscrowedNotStranded() public {
         address token = _launch(false, keccak256("@somebody"), 500);
         _trade(token);
-        assertGt(hook.owed(_poolId(token), _poolKey(token).currency0), 0, "tax accrued");
+        assertGt(hook.owed(_poolId(token), _poolKey(token).currency1), 0, "tax accrued");
 
         launchpad.collectFees(token);
 
@@ -182,6 +183,40 @@ contract TaxRoutingTest is TsukiTestBase {
             }
         }
         assertTrue(found, "the factory announced the launch");
+    }
+
+    /// @dev The bug: `hook.claim` was permissionless and paid the pad, but the
+    ///      pad only learns the amount by reading the hook in the same call. A
+    ///      stranger calling `claim` first landed the money in the pad untracked,
+    ///      forever -- and a large buyer was paid to do it, since the pad used to
+    ///      sell what it collected into the pool they were about to dump into.
+    function test_nobodyElseCanClaimTheTaxIntoThePad() public {
+        address token = _launch(false, bytes32(0), 1_000);
+        _trade(token);
+        uint256 owed = hook.owed(_poolId(token), _poolKey(token).currency1);
+        assertGt(owed, 0, "tax accrued");
+
+        vm.prank(alice);
+        vm.expectRevert(TsukiHook.NotTheRecipient.selector);
+        hook.claim(_poolKey(token));
+
+        // Still on the hook's books, and the pad's own collection gets all of it.
+        assertEq(hook.owed(_poolId(token), _poolKey(token).currency1), owed, "nothing moved");
+        uint256 padBefore = usdc.balanceOf(address(launchpad));
+        launchpad.collectFees(token);
+        assertEq(hook.owed(_poolId(token), _poolKey(token).currency1), 0, "collected");
+        assertEq(usdc.balanceOf(address(launchpad)), padBefore, "nothing stuck in the pad");
+    }
+
+    /// @dev The whole tax is USDC. The hook never holds the token, so there is
+    ///      nothing for the pad to sell and no price for a collection to move.
+    function test_theTaxIsNeverTakenInTheToken() public {
+        address token = _launch(false, bytes32(0), 1_000);
+        uint256 bought = _poolBuy(alice, token, 10_000e6);
+        assertEq(hook.owed(_poolId(token), _poolKey(token).currency1), 1_000e6, "10% of 10,000 USDC, in USDC");
+        _poolSell(alice, token, bought);
+        assertEq(hook.owed(_poolId(token), _poolKey(token).currency0), 0, "no token, either direction");
+        assertEq(IERC20(token).balanceOf(address(hook)), 0, "hook holds none");
     }
 
     /// @dev A fee recipient that cannot receive USDC used to take the treasury's

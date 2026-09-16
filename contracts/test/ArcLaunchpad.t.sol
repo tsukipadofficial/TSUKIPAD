@@ -378,11 +378,12 @@ contract ArcLaunchpadTest is TsukiTestBase {
         );
 
         uint256 bought = _buy(alice, token, 1_000e6);
-        uint256 taxOnBuy = hook.owed(_poolId(token), _poolKey(token).currency0);
-        assertApproxEqRel(taxOnBuy, (bought + taxOnBuy) / 10, 0.01e18, "10% of the tokens bought");
+        uint256 taxOnBuy = hook.owed(_poolId(token), _poolKey(token).currency1);
+        assertEq(taxOnBuy, 100e6, "10% of the 1,000 USDC spent, in USDC");
+        assertEq(hook.owed(_poolId(token), _poolKey(token).currency0), 0, "never in the token");
 
         uint256 usdcBack = _sell(alice, token, bought / 2);
-        uint256 taxOnSell = hook.owed(_poolId(token), _poolKey(token).currency1);
+        uint256 taxOnSell = hook.owed(_poolId(token), _poolKey(token).currency1) - taxOnBuy;
         assertApproxEqRel(taxOnSell, (usdcBack + taxOnSell) / 10, 0.01e18, "and 10% of the USDC sold for");
 
         // It is the creator's, but it reaches them through the pad, which is
@@ -394,7 +395,7 @@ contract ArcLaunchpadTest is TsukiTestBase {
         launchpad.collectFees(token);
         assertEq(hook.owed(_poolId(token), _poolKey(token).currency0), 0, "hook holds nothing after");
         assertEq(hook.owed(_poolId(token), _poolKey(token).currency1), 0, "hook holds nothing after");
-        assertGt(usdc.balanceOf(creator) - usdcBefore, taxOnSell, "usdc-side tax reached the creator");
+        assertGt(usdc.balanceOf(creator) - usdcBefore, taxOnSell, "the tax reached the creator, in USDC");
         // The token side is sold for USDC when it is worth selling, so the
         // creator is paid in USDC rather than in a bag of their own token.
         assertGe(IERC20(token).balanceOf(creator) - tokensBefore, 0, "no token-side dust stranded");

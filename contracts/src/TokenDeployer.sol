@@ -26,6 +26,11 @@ contract TokenDeployer {
     ///      separately. `curve` says which shape the launch is: a curve launch
     ///      trades on the pad until it graduates, a direct one is in a Uniswap
     ///      pool from this block.
+    ///
+    ///      Anyone can call this contract, so anyone can emit this event with a
+    ///      `pad` of their choosing. `pad` is indexed for exactly that reason:
+    ///      a consumer must filter on the pads it trusts, and treat `creator`
+    ///      and the names as claims made by whoever `pad` is.
     event TokenDeployed(
         address indexed token, address indexed pad, address indexed creator, bool curve, string name, string symbol
     );

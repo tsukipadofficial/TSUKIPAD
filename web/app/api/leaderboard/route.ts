@@ -18,6 +18,12 @@ export const dynamic = "force-dynamic";
 const MAX_TRADERS = 200;
 const TOP = 50;
 
+/// Shared-cache lifetime. Positions only move when the indexer runs, and every
+/// open leaderboard polls this every 30s, so a 10s CDN copy collapses a crowd
+/// into one Redis walk without anyone seeing a number the indexer has not
+/// written yet.
+const CACHE = { "cache-control": "public, s-maxage=10, stale-while-revalidate=30" };
+
 type Row = {
   wallet: string;
   handle: string | null;
@@ -81,15 +87,23 @@ export async function GET(req: NextRequest) {
 
   const wallet = req.nextUrl.searchParams.get("wallet");
   const mode = req.nextUrl.searchParams.get("mode");
-  const meta = await launchMeta();
 
   // ---- one trader's book -------------------------------------------------
   if (wallet) {
-    const tokens = (await cmd<string[]>("SMEMBERS", K.traderTokens(wallet))) ?? [];
+    // The chain read and the first Redis read do not depend on each other.
+    const [meta, tokens] = await Promise.all([
+      launchMeta(),
+      cmd<string[]>("SMEMBERS", K.traderTokens(wallet)).then((t) => t ?? []),
+    ]);
     if (tokens.length === 0) {
-      return NextResponse.json({ ok: true, wallet, totals: null, positions: [] });
+      return NextResponse.json({ ok: true, wallet, totals: null, positions: [] }, { headers: CACHE });
     }
-    const raw = await pipeline<string | null>(tokens.map((t) => ["GET", K.position(wallet, t)]));
+    // Lifetime earnings ride the same round trip as the positions.
+    const raw = await pipeline<string | null>([
+      ...tokens.map((t): (string | number)[] => ["GET", K.position(wallet, t)]),
+      ["GET", `earn:total:${wallet.toLowerCase()}`],
+    ]);
+    const earnedRaw = raw[tokens.length];
     let realized = 0n, unreal = 0n, volume = 0n, value = 0n, spent = 0n;
     const positions = tokens.flatMap((t, i) => {
       if (!raw[i]) return [];
@@ -105,8 +119,6 @@ export async function GET(req: NextRequest) {
     });
     positions.sort((a, b) => b.netPnl - a.netPnl);
 
-    const earnedRaw = await cmd<string | null>("GET", `earn:total:${wallet.toLowerCase()}`);
-
     return NextResponse.json({
       ok: true, wallet,
       totals: {
@@ -121,7 +133,7 @@ export async function GET(req: NextRequest) {
         earned: earnedRaw ? Number(BigInt(earnedRaw)) / 1e6 : 0,
       },
       positions,
-    });
+    }, { headers: CACHE });
   }
 
   // ---- top earners -------------------------------------------------------
@@ -132,22 +144,41 @@ export async function GET(req: NextRequest) {
       avatar: null as string | null, earned: e.earned,
     }));
     await decorate(rows);
-    return NextResponse.json({ ok: true, rows, configured: true });
+    return NextResponse.json({ ok: true, rows, configured: true }, { headers: CACHE });
   }
 
   // ---- the PNL board -----------------------------------------------------
   // Traders are capped: ranking every wallet on every request would grow into
   // the request that times out on the busiest day of the year.
-  const traders = ((await cmd<string[]>("SMEMBERS", K.traders)) ?? []).slice(0, MAX_TRADERS);
+  const [meta, traders] = await Promise.all([
+    launchMeta(),
+    cmd<string[]>("SMEMBERS", K.traders).then((t) => (t ?? []).slice(0, MAX_TRADERS)),
+  ]);
   const rows: Row[] = [];
   // Every position anyone holds, so the best individual trades can be surfaced
   // without a second pass over the same data.
   const allTrades: { wallet: string; row: ReturnType<typeof positionRow> }[] = [];
 
-  for (const w of traders) {
-    const tokens = (await cmd<string[]>("SMEMBERS", K.traderTokens(w))) ?? [];
-    if (tokens.length === 0) continue;
-    const raw = await pipeline<string | null>(tokens.map((t) => ["GET", K.position(w, t)]));
+  // Two round trips for the whole board, not two per trader. Upstash is a REST
+  // hop away, so at 200 traders the per-wallet loop this replaces spent most
+  // of the request waiting on the network rather than on Redis.
+  const tokenLists = traders.length
+    ? await pipeline<string[] | null>(traders.map((w) => ["SMEMBERS", K.traderTokens(w)]))
+    : [];
+  const reads: { w: string; tokens: string[] }[] = traders.flatMap((w, i) => {
+    const tokens = tokenLists[i] ?? [];
+    return tokens.length > 0 ? [{ w, tokens }] : [];
+  });
+  const positions = reads.length
+    ? await pipeline<string | null>(
+        reads.flatMap(({ w, tokens }) => tokens.map((t): (string | number)[] => ["GET", K.position(w, t)])),
+      )
+    : [];
+
+  let cursor = 0;
+  for (const { w, tokens } of reads) {
+    const raw = positions.slice(cursor, cursor + tokens.length);
+    cursor += tokens.length;
     let realized = 0n, unreal = 0n, volume = 0n, open = 0;
     raw.forEach((r, i) => {
       if (!r) return;
@@ -178,10 +209,10 @@ export async function GET(req: NextRequest) {
     .slice(0, 12)
     .map((x) => ({ wallet: x.wallet, handle: null as string | null, display: null as string | null, avatar: null as string | null, ...x.row }));
 
-  await decorate(top);
-  await decorate(topTrades);
+  // Independent lists, so their profile lookups overlap.
+  await Promise.all([decorate(top), decorate(topTrades)]);
 
   return NextResponse.json({
     ok: true, rows: top, topTrades, traders: traders.length, configured: true,
-  });
+  }, { headers: CACHE });
 }

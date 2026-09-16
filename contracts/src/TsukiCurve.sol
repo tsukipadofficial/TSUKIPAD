@@ -514,6 +514,10 @@ contract TsukiCurve is TsukiV4Pool, ReentrancyGuard {
         uint256 tax0 = hook.owed(id, key.currency0);
         uint256 tax1 = hook.owed(id, key.currency1);
         if (tax0 > 0 || tax1 > 0) hook.claim(key);
+        // The hook takes its tax in USDC, so tax0 is zero by construction; it is
+        // folded in anyway so that any token it ever did hold is sold for USDC
+        // with the pool fees rather than handed out in kind.
+        owed0 += tax0;
 
         uint256 usdc = owed1;
         uint256 unsold = owed0;
@@ -539,8 +543,7 @@ contract TsukiCurve is TsukiV4Pool, ReentrancyGuard {
             protocolFeesOwed += taxProtocol;
             creatorFeesOwed[token] += tax1 - taxProtocol;
         }
-        // The token side joins `unsold`, which is already split below.
-        if (tax0 > 0) unsold += tax0;
+
         if (unsold > 0) {
             uint256 protocolTokens = (unsold * protocolFeeBps) / 10_000;
             if (protocolTokens > 0) IERC20(token).safeTransfer(treasury, protocolTokens);

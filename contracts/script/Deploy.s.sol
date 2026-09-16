@@ -62,7 +62,8 @@ contract Deploy is Script {
     uint16 constant CURVE_LP_BPS = 1_798;
 
     uint160 constant HOOK_FLAGS =
-        uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG);
+        uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_FLAG
+                | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG);
 
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");

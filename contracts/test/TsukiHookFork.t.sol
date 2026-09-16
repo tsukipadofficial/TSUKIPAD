@@ -62,7 +62,8 @@ contract TsukiHookForkTest is Test {
 
         (address hookAddr, bytes32 salt) = HookMiner.find(
             address(this),
-            uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG),
+            uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_FLAG
+                | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG),
             type(TsukiHook).creationCode,
             abi.encode(PM, address(this), address(this))
         );
@@ -120,19 +121,30 @@ contract TsukiHookForkTest is Test {
         );
     }
 
-    function test_buyIsTaxedInTheToken() public {
+    function test_buyIsTaxedInUsdcOffTheAmountSpent() public {
         if (address(PM).code.length == 0) return;
 
-        uint256 before = token.balanceOf(trader);
-        _swap(false, -1_000e18); // USDC in, token out
-        uint256 received = token.balanceOf(trader) - before;
+        uint256 usdcBefore = usdc.balanceOf(trader);
+        _swap(false, -1_000e18); // spend exactly 1,000 USDC
+        assertEq(usdcBefore - usdc.balanceOf(trader), 1_000e18, "trader spent what they said");
 
-        uint256 taken = hook.owed(key.toId(), key.currency0);
-        assertGt(taken, 0, "tax taken on the token side");
-        // The trader keeps the rest: tax is 10% of what the pool paid out.
-        assertApproxEqRel(taken, (received + taken) / 10, 1e15, "10% of the output");
-        assertEq(hook.owed(key.toId(), key.currency1), 0, "nothing taken in USDC");
-        assertEq(token.balanceOf(address(hook)), taken, "hook actually holds it");
+        // 10% of the 1,000 spent, taken in USDC. Nothing in the token: a token
+        // tax at the marginal price is worth far more than its face value on a
+        // fresh range, and selling it would crash the price it was taken at.
+        assertEq(hook.owed(key.toId(), key.currency1), 100e18, "exactly 10% of the USDC spent");
+        assertEq(hook.owed(key.toId(), key.currency0), 0, "nothing taken in the token");
+        assertEq(token.balanceOf(address(hook)), 0, "hook holds no token");
+        // Booked as a claim on the manager until the recipient collects.
+        assertEq(PM.balanceOf(address(hook), uint256(uint160(address(usdc)))), 100e18, "held as a claim");
+    }
+
+    function test_exactOutputSellIsTaxedInUsdcTheTraderAskedFor() public {
+        if (address(PM).code.length == 0) return;
+
+        uint256 usdcBefore = usdc.balanceOf(trader);
+        _swap(true, 200e18); // "get me exactly 200 USDC"
+        assertEq(usdc.balanceOf(trader) - usdcBefore, 200e18, "trader received exactly what they asked");
+        assertEq(hook.owed(key.toId(), key.currency1), 20e18, "and the pool paid 10% on top, to the tax");
     }
 
     function test_sellIsTaxedInUsdc() public {
@@ -145,16 +157,20 @@ contract TsukiHookForkTest is Test {
         uint256 taken = hook.owed(key.toId(), key.currency1);
         assertGt(taken, 0, "tax taken on the USDC side");
         assertApproxEqRel(taken, (received + taken) / 10, 1e15, "10% of the output");
-        assertEq(usdc.balanceOf(address(hook)), taken, "hook actually holds it");
+        // Booked as a claim on the manager, not moved: moving it mid-swap would
+        // fail on a pool the manager holds no USDC for yet.
+        assertEq(PM.balanceOf(address(hook), uint256(uint160(address(usdc)))), taken, "held as a claim");
     }
 
     function test_bothSidesTaxedUnlikeAnyV3Workaround() public {
         if (address(PM).code.length == 0) return;
 
         _swap(false, -1_000e18);
+        uint256 afterBuy = hook.owed(key.toId(), key.currency1);
+        assertGt(afterBuy, 0, "buy taxed");
         _swap(true, -1_000e18);
-        assertGt(hook.owed(key.toId(), key.currency0), 0, "buy taxed");
-        assertGt(hook.owed(key.toId(), key.currency1), 0, "sell taxed");
+        assertGt(hook.owed(key.toId(), key.currency1), afterBuy, "sell taxed too");
+        assertEq(hook.owed(key.toId(), key.currency0), 0, "never in the token");
     }
 
     function test_claimPaysTheCreator() public {
@@ -165,8 +181,16 @@ contract TsukiHookForkTest is Test {
         uint256 t = hook.owed(key.toId(), key.currency0);
         uint256 u = hook.owed(key.toId(), key.currency1);
 
-        hook.claim(key); // permissionless, always pays the recorded creator
-        assertEq(token.balanceOf(creator), t, "token tax paid out");
+        // Only the recorded recipient may claim: the pads learn the amount by
+        // reading `owed` in the same call, so a claim by anyone else would
+        // strand the money there untracked.
+        vm.prank(address(0xBAD));
+        vm.expectRevert(TsukiHook.NotTheRecipient.selector);
+        hook.claim(key);
+
+        vm.prank(creator);
+        hook.claim(key);
+        assertEq(token.balanceOf(creator), t, "token tax paid out (zero by design)");
         assertEq(usdc.balanceOf(creator), u, "usdc tax paid out");
         assertEq(hook.owed(key.toId(), key.currency0), 0, "balance cleared");
         assertEq(hook.owed(key.toId(), key.currency1), 0, "balance cleared");

@@ -72,7 +72,8 @@ contract GraduationForkTest is Test {
         address predictedCurve = vm.computeCreateAddress(address(this), nonce + 1);
         (, bytes32 salt) = HookMiner.find(
             address(this),
-            uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG),
+            uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_FLAG
+                | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG),
             type(TsukiHook).creationCode,
             abi.encode(PM, predictedLaunchpad, predictedCurve)
         );
@@ -146,7 +147,7 @@ contract GraduationForkTest is Test {
         assertEq(IERC20(token).balanceOf(address(curve)), 0, "curve kept nothing");
 
         // --- and it trades, with the tax still applying -------------------
-        uint256 taxBefore = hook.owed(key.toId(), key.currency0);
+        uint256 taxBefore = hook.owed(key.toId(), key.currency1);
         vm.startPrank(whale);
         usdc.approve(address(router), type(uint256).max);
         uint256 bought = router.exactInputSingle(
@@ -160,8 +161,8 @@ contract GraduationForkTest is Test {
             })
         );
         assertGt(bought, 0, "buy works in the graduated pool");
-        uint256 taxTaken = hook.owed(key.toId(), key.currency0) - taxBefore;
-        assertApproxEqRel(taxTaken, (bought + taxTaken) / 10, 0.01e18, "10% tax on the buy");
+        uint256 taxTaken = hook.owed(key.toId(), key.currency1) - taxBefore;
+        assertEq(taxTaken, 50e6, "10% of the 500 USDC spent, in USDC");
 
         IERC20(token).approve(address(router), bought);
         uint256 usdcBack = router.exactInputSingle(
@@ -176,7 +177,7 @@ contract GraduationForkTest is Test {
         );
         vm.stopPrank();
         assertGt(usdcBack, 0, "sell works in the graduated pool");
-        assertGt(hook.owed(key.toId(), key.currency1), 0, "and the sell is taxed too");
+        assertGt(hook.owed(key.toId(), key.currency1), taxTaken, "and the sell is taxed too");
 
         // --- fees reach the creator, principal does not move --------------
         uint128 liqBefore = PM.getLiquidity(key.toId());

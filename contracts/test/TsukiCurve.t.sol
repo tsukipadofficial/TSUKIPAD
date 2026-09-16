@@ -309,12 +309,13 @@ contract TsukiCurveTest is TsukiTestBase {
         _buy(bob, token, 20_000e6);
         assertTrue(curve.curveOf(token).graduated);
 
-        // A pool buy is taxed at the same rate the curve charged, and the tax
-        // lands with the hook for the creator to claim.
-        uint256 before = hook.owed(_poolId(token), _poolKey(token).currency0);
+        // A pool buy is taxed at the same rate the curve charged -- in USDC, off
+        // the amount spent -- and the tax lands with the hook for the pad.
+        uint256 before = hook.owed(_poolId(token), _poolKey(token).currency1);
         uint256 got = _poolBuy(alice, token, 1_000e6);
-        uint256 taken = hook.owed(_poolId(token), _poolKey(token).currency0) - before;
-        assertApproxEqRel(taken, (got + taken) / 20, 0.01e18, "5% of the tokens bought");
+        assertGt(got, 0);
+        uint256 taken = hook.owed(_poolId(token), _poolKey(token).currency1) - before;
+        assertEq(taken, 50e6, "5% of the 1,000 USDC spent");
 
         // And so is a sell, which no v3 design could have charged.
         uint256 usdcBefore = hook.owed(_poolId(token), _poolKey(token).currency1);
