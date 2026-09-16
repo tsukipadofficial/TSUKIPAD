@@ -136,6 +136,41 @@ library LiquidityAmounts {
         return uint128(result);
     }
 
+    /// @notice Largest liquidity value fully backed by `amount1` across [A, B].
+    function getLiquidityForAmount1(uint160 sqrtRatioAX96, uint160 sqrtRatioBX96, uint256 amount1)
+        internal
+        pure
+        returns (uint128 liquidity)
+    {
+        if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+        uint256 result = FullMath.mulDiv(amount1, Q96, sqrtRatioBX96 - sqrtRatioAX96);
+        require(result <= type(uint128).max, "LA: overflow");
+        return uint128(result);
+    }
+
+    /// @notice Largest liquidity backed by both amounts at the current price.
+    /// @dev Used when a graduating curve seeds a two-sided position, where the
+    ///      price sits inside the range and both tokens are needed.
+    function getLiquidityForAmounts(
+        uint160 sqrtRatioX96,
+        uint160 sqrtRatioAX96,
+        uint160 sqrtRatioBX96,
+        uint256 amount0,
+        uint256 amount1
+    ) internal pure returns (uint128 liquidity) {
+        if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+
+        if (sqrtRatioX96 <= sqrtRatioAX96) {
+            liquidity = getLiquidityForAmount0(sqrtRatioAX96, sqrtRatioBX96, amount0);
+        } else if (sqrtRatioX96 < sqrtRatioBX96) {
+            uint128 liquidity0 = getLiquidityForAmount0(sqrtRatioX96, sqrtRatioBX96, amount0);
+            uint128 liquidity1 = getLiquidityForAmount1(sqrtRatioAX96, sqrtRatioX96, amount1);
+            liquidity = liquidity0 < liquidity1 ? liquidity0 : liquidity1;
+        } else {
+            liquidity = getLiquidityForAmount1(sqrtRatioAX96, sqrtRatioBX96, amount1);
+        }
+    }
+
     /// @notice token0 required to back `liquidity` across [A, B].
     function getAmount0ForLiquidity(uint160 sqrtRatioAX96, uint160 sqrtRatioBX96, uint128 liquidity)
         internal

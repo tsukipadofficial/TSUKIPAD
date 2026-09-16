@@ -4,11 +4,13 @@ pragma solidity ^0.8.26;
 import {Test, console2} from "forge-std/Test.sol";
 
 import {ArcLaunchpad} from "../src/ArcLaunchpad.sol";
-import {ArcSwapRouter} from "../src/ArcSwapRouter.sol";
 import {LaunchToken} from "../src/LaunchToken.sol";
-import {IUniswapV3Factory} from "../src/interfaces/IUniswapV3.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Currency} from "v4-core/types/Currency.sol";
+import {PoolId} from "v4-core/types/PoolId.sol";
+import {TsukiTestBase} from "./TsukiTestBase.sol";
+import {TsukiRouter} from "../src/TsukiRouter.sol";
 
 /// @notice Follows every cent of every fee, with creator, treasury, beneficiary
 ///         and trader all held by *distinct* addresses.
@@ -16,19 +18,12 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 /// The live-chain checks could not separate these — there the creator, the
 /// treasury and the deployer are one wallet, so "the creator was paid" and "the
 /// protocol was paid" are indistinguishable. These tests pin the exact split.
-contract FeeAccountingTest is Test {
-    address constant USDC_ADDR = 0x3600000000000000000000000000000000000000;
-    string constant FACTORY_ARTIFACT =
-        "tools/node_modules/@uniswap/v3-core/artifacts/contracts/UniswapV3Factory.sol/UniswapV3Factory.json";
+contract FeeAccountingTest is TsukiTestBase {
 
-    uint24 constant FEE = 10_000; // 1%
     int24 constant TICK_LOWER = -403_400;
     int24 constant TICK_UPPER = -334_400;
     uint256 constant SUPPLY = 1_000_000_000 ether;
 
-    ArcLaunchpad launchpad;
-    ArcSwapRouter router;
-    MockUSDC usdc;
 
     // Four genuinely different parties.
     address treasury = makeAddr("PLATFORM_TREASURY");
@@ -39,22 +34,14 @@ contract FeeAccountingTest is Test {
     /// @dev Kept on the contract so a test can stand up a second launchpad on
     ///      the same factory -- needed now that the fee split is immutable and
     ///      a different split means a different deployment.
-    address factoryAddr;
 
     function setUp() public {
-        deployCodeTo("MockUSDC.sol:MockUSDC", USDC_ADDR);
-        usdc = MockUSDC(USDC_ADDR);
-
-        bytes memory code = vm.getCode(FACTORY_ARTIFACT);
-        // `create` must write to a local; assembly cannot assign to storage.
-        address f;
-        assembly {
-            f := create(0, add(code, 0x20), mload(code))
-        }
-        factoryAddr = f;
         // 50/50 split between creator and platform.
-        launchpad = new ArcLaunchpad(USDC_ADDR, f, FEE, treasury, 5_000, address(this), 0, 0);
-        router = new ArcSwapRouter(f);
+        StackConfig memory cfg = _defaultConfig(treasury, address(this));
+        cfg.protocolFeeBps = 5_000;
+        cfg.launchFee = 0;
+        cfg.referralFeeBps = 0;
+        _deployStack(cfg);
         usdc.mint(trader, 1_000_000e6);
     }
 
@@ -87,7 +74,8 @@ contract FeeAccountingTest is Test {
                 feeRecipient: feeRecipient,
                 buybackAndBurn: burn,
                 recipientCommitment: bytes32(0),
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
         token = LaunchToken(t);
@@ -97,14 +85,13 @@ contract FeeAccountingTest is Test {
         vm.startPrank(trader);
         usdc.approve(address(router), usdcIn);
         out = router.exactInputSingle(
-            ArcSwapRouter.ExactInputSingleParams({
-                tokenIn: USDC_ADDR,
-                tokenOut: token,
-                fee: FEE,
-                recipient: trader,
-                deadline: block.timestamp + 1,
+            TsukiRouter.ExactInputSingleParams({
+                key: _poolKey(token),
+                zeroForOne: false,
                 amountIn: usdcIn,
-                amountOutMinimum: 0
+                amountOutMinimum: 0,
+                recipient: trader,
+                deadline: block.timestamp + 1
             })
         );
         vm.stopPrank();
@@ -146,7 +133,11 @@ contract FeeAccountingTest is Test {
     ///      edited after they launch, only offered differently by a new pad.
     function test_protocolFeeBpsActuallyChangesTheSplit() public {
         // 20% to platform, 80% to creator.
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 2_000, address(this), 0, 0);
+        StackConfig memory cfg = _defaultConfig(treasury, address(this));
+        cfg.protocolFeeBps = 2_000;
+        cfg.launchFee = 0;
+        cfg.referralFeeBps = 0;
+        _deployStack(cfg);
         LaunchToken token = _launch(false, address(0), false);
 
         _buy(address(token), 40_000e6);
@@ -251,10 +242,10 @@ contract FeeAccountingTest is Test {
         assertEq(launchpad.MAX_PROTOCOL_FEE_BPS(), 5_000, "capped at 50%");
 
         vm.expectRevert(ArcLaunchpad.FeeTooHigh.selector);
-        new ArcLaunchpad(USDC_ADDR, address(1), FEE, treasury, 5_001, address(this), 0, 0);
+        new ArcLaunchpad(USDC_ADDR, manager, hook, tokenDeployer, FEE, TICK_SPACING, treasury, 5_001, address(this), 0, 0);
 
         vm.expectRevert(ArcLaunchpad.FeeTooHigh.selector);
-        new ArcLaunchpad(USDC_ADDR, address(1), FEE, treasury, 10_000, address(this), 0, 0);
+        new ArcLaunchpad(USDC_ADDR, manager, hook, tokenDeployer, FEE, TICK_SPACING, treasury, 10_000, address(this), 0, 0);
 
         // The maximum is allowed, and still leaves creators half.
         LaunchToken token = _launch(false, address(0), false);

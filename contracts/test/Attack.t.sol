@@ -4,27 +4,23 @@ pragma solidity ^0.8.26;
 import {Test, console2} from "forge-std/Test.sol";
 
 import {ArcLaunchpad} from "../src/ArcLaunchpad.sol";
-import {ArcSwapRouter} from "../src/ArcSwapRouter.sol";
 import {LaunchToken} from "../src/LaunchToken.sol";
-import {IUniswapV3Factory, IUniswapV3Pool} from "../src/interfaces/IUniswapV3.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Currency} from "v4-core/types/Currency.sol";
+import {PoolId} from "v4-core/types/PoolId.sol";
+import {TsukiTestBase} from "./TsukiTestBase.sol";
+import {TsukiRouter} from "../src/TsukiRouter.sol";
+import {TsukiV4Pool} from "../src/TsukiV4Pool.sol";
 
 /// @notice Adversarial tests. Every one of these is an attacker trying to take
 ///         money or control that is not theirs.
-contract AttackTest is Test {
-    address constant USDC_ADDR = 0x3600000000000000000000000000000000000000;
-    string constant FACTORY_ARTIFACT =
-        "tools/node_modules/@uniswap/v3-core/artifacts/contracts/UniswapV3Factory.sol/UniswapV3Factory.json";
+contract AttackTest is TsukiTestBase {
 
-    uint24 constant FEE = 10_000;
     int24 constant TICK_LOWER = -403_400;
     int24 constant TICK_UPPER = -334_400;
     uint256 constant SUPPLY = 1_000_000_000 ether;
 
-    ArcLaunchpad launchpad;
-    ArcSwapRouter router;
-    MockUSDC usdc;
 
     address owner = address(this);
     address treasury = makeAddr("treasury");
@@ -33,13 +29,11 @@ contract AttackTest is Test {
     address attacker = makeAddr("ATTACKER");
 
     function setUp() public {
-        deployCodeTo("MockUSDC.sol:MockUSDC", USDC_ADDR);
-        usdc = MockUSDC(USDC_ADDR);
-        bytes memory code = vm.getCode(FACTORY_ARTIFACT);
-        address f;
-        assembly { f := create(0, add(code, 0x20), mload(code)) }
-        launchpad = new ArcLaunchpad(USDC_ADDR, f, FEE, treasury, 5_000, address(this), 0, 0);
-        router = new ArcSwapRouter(f);
+        StackConfig memory cfg = _defaultConfig(treasury, address(this));
+        cfg.protocolFeeBps = 5_000;
+        cfg.launchFee = 0;
+        cfg.referralFeeBps = 0;
+        _deployStack(cfg);
         usdc.mint(holder, 500_000e6);
         usdc.mint(attacker, 500_000e6);
     }
@@ -57,20 +51,14 @@ contract AttackTest is Test {
             tickLower: TICK_LOWER, tickUpper: TICK_UPPER, creatorAllocationBps: 1_000,
             rewardHolders: rewards, feeRecipient: address(0), buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
         }));
         t = LaunchToken(a);
     }
 
     function _buy(address who, address t, uint256 amt) internal returns (uint256) {
-        vm.startPrank(who);
-        usdc.approve(address(router), amt);
-        uint256 o = router.exactInputSingle(ArcSwapRouter.ExactInputSingleParams({
-            tokenIn: USDC_ADDR, tokenOut: t, fee: FEE, recipient: who,
-            deadline: block.timestamp + 1, amountIn: amt, amountOutMinimum: 0
-        }));
-        vm.stopPrank();
-        return o;
+        return _poolBuy(who, t, amt);
     }
 
     // ---------------- admin surface ----------------
@@ -132,32 +120,25 @@ contract AttackTest is Test {
         launchpad.claimFeeRecipient(address(t), attacker, uint64(block.timestamp + 1 hours), hex"00");
     }
 
-    function test_attackerCannotStealCreatorAllocation() public {
-        LaunchToken t = _launch(false);
-        vm.warp(block.timestamp + 30 minutes);
-
-        // Anyone may trigger the release, but it can only pay the creator.
-        vm.prank(attacker);
-        launchpad.claimCreatorAllocation(address(t));
-
-        assertEq(t.balanceOf(attacker), 0, "attacker received nothing");
-        assertApproxEqRel(t.balanceOf(creator), SUPPLY / 10, 0.001e18, "creator received it");
-    }
-
     // ---------------- callback surface ----------------
 
-    function test_attackerCannotForgeMintCallbackToDrainTokens() public {
+    /// @dev v4 replaces the two v3 callbacks with a single unlock callback, so
+    ///      this is the whole forgeable surface the pad now exposes.
+    function test_attackerCannotForgeUnlockCallbackToDrainThePad() public {
         LaunchToken t = _launch(false);
         vm.prank(attacker);
-        vm.expectRevert(ArcLaunchpad.UnauthorizedCallback.selector);
-        launchpad.uniswapV3MintCallback(1e18, 0, abi.encode(address(t), type(uint256).max));
+        vm.expectRevert(TsukiV4Pool.NotPoolManager.selector);
+        launchpad.unlockCallback(abi.encode(uint8(0), _poolKey(address(t)), int24(0), int24(0), uint256(1e18)));
     }
 
-    function test_attackerCannotForgeSwapCallbackToDrainUsdc() public {
+    /// @dev The pads swap through `swapForSelf`, which only they may call --
+    ///      otherwise anyone could spend a pad's balance at a price of their
+    ///      choosing and keep the proceeds.
+    function test_attackerCannotMakeThePadSwapForThem() public {
         LaunchToken t = _launch(false);
         vm.prank(attacker);
-        vm.expectRevert(ArcLaunchpad.UnauthorizedCallback.selector);
-        launchpad.uniswapV3SwapCallback(-1e18, 1e6, abi.encode(address(t)));
+        vm.expectRevert(TsukiV4Pool.NotSelf.selector);
+        launchpad.swapForSelf(_poolKey(address(t)), true, 1e18);
     }
 
     /// @dev The router pays from `payer` encoded in the callback data. A forged
@@ -169,9 +150,24 @@ contract AttackTest is Test {
         vm.prank(holder);
         IERC20(address(t)).approve(address(router), type(uint256).max);
 
+        // v4 hands the unlock callback only to the address that asked for it.
+        // An attacker calling it directly is refused before any allowance of
+        // the holder's could be reached.
         vm.prank(attacker);
-        vm.expectRevert(ArcSwapRouter.InvalidCallback.selector);
-        router.uniswapV3SwapCallback(1e18, -1e6, abi.encode(address(t), USDC_ADDR, FEE, holder));
+        vm.expectRevert(TsukiRouter.NotPoolManager.selector);
+        router.unlockCallback(
+            abi.encode(
+                TsukiRouter.ExactInputSingleParams({
+                    key: _poolKey(address(t)),
+                    zeroForOne: true,
+                    amountIn: 1e18,
+                    amountOutMinimum: 0,
+                    recipient: attacker,
+                    deadline: block.timestamp + 1
+                }),
+                holder
+            )
+        );
     }
 
     // ---------------- registry surface ----------------
@@ -262,7 +258,10 @@ contract AttackTest is Test {
         _buy(holder, address(t), 20_000e6);
         launchpad.collectFees(address(t));
 
-        uint256 before = t.pendingRewards(holder);
+        // The creator's allocation is delivered at launch, so the creator is a
+        // holder too and takes their pro-rata share of any top-up.
+        uint256 holderBefore = t.pendingRewards(holder);
+        uint256 creatorBefore = t.pendingRewards(creator);
 
         // A real donation: transfer first, then notify.
         vm.startPrank(attacker);
@@ -270,12 +269,19 @@ contract AttackTest is Test {
         t.notifyRewards();
         vm.stopPrank();
 
-        uint256 gained = t.pendingRewards(holder) - before;
-        console2.log("holder gained from a real $500 top-up:", gained);
-        assertApproxEqRel(gained, 500e6, 0.01e18, "the full donation reached holders");
+        uint256 holderGained = t.pendingRewards(holder) - holderBefore;
+        uint256 creatorGained = t.pendingRewards(creator) - creatorBefore;
+        console2.log("holder gained from a real $500 top-up: ", holderGained);
+        console2.log("creator gained from a real $500 top-up:", creatorGained);
+        assertApproxEqRel(holderGained + creatorGained, 500e6, 0.01e18, "the full donation reached holders");
+        assertApproxEqRel(
+            holderGained * t.balanceOf(creator), creatorGained * t.balanceOf(holder), 0.01e18, "split by holdings"
+        );
 
+        uint256 owed = t.pendingRewards(holder);
         vm.prank(holder);
         uint256 claimed = t.claimRewards();
-        assertGt(claimed, 500e6, "and it is genuinely withdrawable");
+        assertEq(claimed, owed, "and it is genuinely withdrawable");
+        assertGt(claimed, holderGained, "donation included");
     }
 }

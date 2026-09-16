@@ -4,11 +4,13 @@ pragma solidity ^0.8.26;
 import {Test, console2} from "forge-std/Test.sol";
 
 import {ArcLaunchpad} from "../src/ArcLaunchpad.sol";
-import {ArcSwapRouter} from "../src/ArcSwapRouter.sol";
 import {LaunchToken} from "../src/LaunchToken.sol";
-import {IUniswapV3Factory} from "../src/interfaces/IUniswapV3.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Currency} from "v4-core/types/Currency.sol";
+import {PoolId} from "v4-core/types/PoolId.sol";
+import {TsukiTestBase} from "./TsukiTestBase.sol";
+import {TsukiRouter} from "../src/TsukiRouter.sol";
 
 /// @notice A narrated walkthrough of who earns what, and when.
 ///
@@ -16,19 +18,12 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 ///   1. Does everyone get the same amount, or is it proportional?
 ///   2. If a holder sells, do they keep what they earned?
 ///   3. If someone buys in later, do they get a cut of earlier rewards?
-contract RewardTimelineTest is Test {
-    address constant USDC_ADDR = 0x3600000000000000000000000000000000000000;
-    string constant FACTORY_ARTIFACT =
-        "tools/node_modules/@uniswap/v3-core/artifacts/contracts/UniswapV3Factory.sol/UniswapV3Factory.json";
+contract RewardTimelineTest is TsukiTestBase {
 
-    uint24 constant FEE = 10_000;
     int24 constant TICK_LOWER = -403_400;
     int24 constant TICK_UPPER = -334_400;
     uint256 constant SUPPLY = 1_000_000_000 ether;
 
-    ArcLaunchpad launchpad;
-    ArcSwapRouter router;
-    MockUSDC usdc;
     LaunchToken token;
 
     address creator = makeAddr("creator");
@@ -38,16 +33,11 @@ contract RewardTimelineTest is Test {
     address carol = makeAddr("carol"); // late joiner
 
     function setUp() public {
-        deployCodeTo("MockUSDC.sol:MockUSDC", USDC_ADDR);
-        usdc = MockUSDC(USDC_ADDR);
-
-        bytes memory code = vm.getCode(FACTORY_ARTIFACT);
-        address factoryAddr;
-        assembly {
-            factoryAddr := create(0, add(code, 0x20), mload(code))
-        }
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000, address(this), 0, 0);
-        router = new ArcSwapRouter(factoryAddr);
+        StackConfig memory cfg = _defaultConfig(treasury, address(this));
+        cfg.protocolFeeBps = 5_000;
+        cfg.launchFee = 0;
+        cfg.referralFeeBps = 0;
+        _deployStack(cfg);
 
         usdc.mint(alice, 100_000e6);
         usdc.mint(bob, 100_000e6);
@@ -76,7 +66,8 @@ contract RewardTimelineTest is Test {
                 feeRecipient: address(0),
                 buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
         token = LaunchToken(t);
@@ -86,14 +77,13 @@ contract RewardTimelineTest is Test {
         vm.startPrank(who);
         usdc.approve(address(router), usdcIn);
         out = router.exactInputSingle(
-            ArcSwapRouter.ExactInputSingleParams({
-                tokenIn: USDC_ADDR,
-                tokenOut: address(token),
-                fee: FEE,
-                recipient: who,
-                deadline: block.timestamp + 1,
+            TsukiRouter.ExactInputSingleParams({
+                key: _poolKey(address(token)),
+                zeroForOne: false,
                 amountIn: usdcIn,
-                amountOutMinimum: 0
+                amountOutMinimum: 0,
+                recipient: who,
+                deadline: block.timestamp + 1
             })
         );
         vm.stopPrank();
@@ -104,14 +94,13 @@ contract RewardTimelineTest is Test {
         vm.startPrank(who);
         IERC20(address(token)).approve(address(router), bal);
         router.exactInputSingle(
-            ArcSwapRouter.ExactInputSingleParams({
-                tokenIn: address(token),
-                tokenOut: USDC_ADDR,
-                fee: FEE,
-                recipient: who,
-                deadline: block.timestamp + 1,
+            TsukiRouter.ExactInputSingleParams({
+                key: _poolKey(address(token)),
+                zeroForOne: true,
                 amountIn: bal,
-                amountOutMinimum: 0
+                amountOutMinimum: 0,
+                recipient: who,
+                deadline: block.timestamp + 1
             })
         );
         vm.stopPrank();

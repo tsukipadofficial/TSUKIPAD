@@ -4,26 +4,22 @@ pragma solidity ^0.8.26;
 import {Test, console2} from "forge-std/Test.sol";
 
 import {ArcLaunchpad} from "../src/ArcLaunchpad.sol";
-import {ArcSwapRouter} from "../src/ArcSwapRouter.sol";
 import {LaunchToken} from "../src/LaunchToken.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Currency} from "v4-core/types/Currency.sol";
+import {PoolId} from "v4-core/types/PoolId.sol";
+import {TsukiTestBase} from "./TsukiTestBase.sol";
+import {TsukiRouter} from "../src/TsukiRouter.sol";
 
 /// @notice Referrals are paid out of the protocol's share of swap fees. A
 ///         creator earns exactly the same whether or not they were referred.
-contract ReferralTest is Test {
-    address constant USDC_ADDR = 0x3600000000000000000000000000000000000000;
-    string constant FACTORY_ARTIFACT =
-        "tools/node_modules/@uniswap/v3-core/artifacts/contracts/UniswapV3Factory.sol/UniswapV3Factory.json";
+contract ReferralTest is TsukiTestBase {
 
-    uint24 constant FEE = 10_000;
     int24 constant TICK_LOWER = -403_400;
     int24 constant TICK_UPPER = -334_400;
     uint256 constant SUPPLY = 1_000_000_000 ether;
 
-    ArcLaunchpad launchpad;
-    ArcSwapRouter router;
-    MockUSDC usdc;
 
     address treasury = makeAddr("treasury");
     address creator = makeAddr("creator");
@@ -31,17 +27,12 @@ contract ReferralTest is Test {
     address referrer = makeAddr("referrer");
 
     function setUp() public {
-        deployCodeTo("MockUSDC.sol:MockUSDC", USDC_ADDR);
-        usdc = MockUSDC(USDC_ADDR);
-
-        bytes memory code = vm.getCode(FACTORY_ARTIFACT);
-        address factoryAddr;
-        assembly {
-            factoryAddr := create(0, add(code, 0x20), mload(code))
-        }
         // 10% of swap fees, fixed at deployment -- there is no setter any more.
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000, address(this), 0, 1_000);
-        router = new ArcSwapRouter(factoryAddr);
+        StackConfig memory cfg = _defaultConfig(treasury, address(this));
+        cfg.protocolFeeBps = 5_000;
+        cfg.launchFee = 0;
+        cfg.referralFeeBps = 1_000;
+        _deployStack(cfg);
 
         usdc.mint(alice, 2_000_000e6);
     }
@@ -69,7 +60,8 @@ contract ReferralTest is Test {
                 feeRecipient: address(0),
                 buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
-                referrer: ref
+                referrer: ref,
+                creatorTaxBps: 0
             })
         );
         token = LaunchToken(t);
@@ -79,16 +71,24 @@ contract ReferralTest is Test {
         vm.startPrank(alice);
         usdc.approve(address(router), usdcIn);
         uint256 out = router.exactInputSingle(
-            ArcSwapRouter.ExactInputSingleParams({
-                tokenIn: USDC_ADDR, tokenOut: token, fee: FEE, recipient: alice,
-                deadline: block.timestamp + 1, amountIn: usdcIn, amountOutMinimum: 0
+            TsukiRouter.ExactInputSingleParams({
+                key: _poolKey(token),
+                zeroForOne: false,
+                amountIn: usdcIn,
+                amountOutMinimum: 0,
+                recipient: alice,
+                deadline: block.timestamp + 1
             })
         );
         IERC20(token).approve(address(router), out);
         router.exactInputSingle(
-            ArcSwapRouter.ExactInputSingleParams({
-                tokenIn: token, tokenOut: USDC_ADDR, fee: FEE, recipient: alice,
-                deadline: block.timestamp + 1, amountIn: out, amountOutMinimum: 0
+            TsukiRouter.ExactInputSingleParams({
+                key: _poolKey(token),
+                zeroForOne: true,
+                amountIn: out,
+                amountOutMinimum: 0,
+                recipient: alice,
+                deadline: block.timestamp + 1
             })
         );
         vm.stopPrank();
@@ -171,7 +171,8 @@ contract ReferralTest is Test {
             name: "Self", symbol: "SELF", metadataURI: "", totalSupply: SUPPLY, salt: salt,
             tickLower: TICK_LOWER, tickUpper: TICK_UPPER, creatorAllocationBps: 0,
             rewardHolders: false, feeRecipient: address(0), buybackAndBurn: false,
-            recipientCommitment: bytes32(0), referrer: creator
+            recipientCommitment: bytes32(0), referrer: creator,
+                creatorTaxBps: 0
         });
 
         vm.prank(creator);
@@ -199,10 +200,10 @@ contract ReferralTest is Test {
     ///      fail to deploy at all rather than fail later at collection time.
     function test_deployRevertsWhenTheRateExceedsTheProtocolShare() public {
         vm.expectRevert(ArcLaunchpad.ReferralFeeTooHigh.selector);
-        new ArcLaunchpad(USDC_ADDR, address(1), FEE, treasury, 5_000, address(this), 0, 6_000);
+        new ArcLaunchpad(USDC_ADDR, manager, hook, tokenDeployer, FEE, TICK_SPACING, treasury, 5_000, address(this), 0, 6_000);
 
         vm.expectRevert(ArcLaunchpad.ReferralFeeTooHigh.selector);
-        new ArcLaunchpad(USDC_ADDR, address(1), FEE, treasury, 5_000, address(this), 0, 2_001);
+        new ArcLaunchpad(USDC_ADDR, manager, hook, tokenDeployer, FEE, TICK_SPACING, treasury, 5_000, address(this), 0, 2_001);
     }
 
     /// @dev There is no setter to guard: the value is `immutable`, so no caller

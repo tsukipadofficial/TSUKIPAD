@@ -5,18 +5,15 @@ import {Test, console2, Vm} from "forge-std/Test.sol";
 
 import {ArcLaunchpad} from "../src/ArcLaunchpad.sol";
 import {LaunchToken} from "../src/LaunchToken.sol";
-import {IUniswapV3Factory} from "../src/interfaces/IUniswapV3.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
+import {PoolId} from "v4-core/types/PoolId.sol";
+import {TsukiTestBase} from "./TsukiTestBase.sol";
 
 /// @notice Confirms token metadata — including an embedded image — is fully
 ///         on-chain and cheap enough to be practical, and that indexers can read
 ///         it both from the launch event and from the token contract.
-contract OnchainMetadataTest is Test {
-    address constant USDC_ADDR = 0x3600000000000000000000000000000000000000;
-    string constant FACTORY_ARTIFACT =
-        "tools/node_modules/@uniswap/v3-core/artifacts/contracts/UniswapV3Factory.sol/UniswapV3Factory.json";
+contract OnchainMetadataTest is TsukiTestBase {
 
-    uint24 constant FEE = 10_000;
     int24 constant TICK_LOWER = -403_400;
     int24 constant TICK_UPPER = -334_400;
     uint256 constant SUPPLY = 1_000_000_000 ether;
@@ -24,20 +21,14 @@ contract OnchainMetadataTest is Test {
     /// @dev Arc testnet gas price at time of writing.
     uint256 constant GAS_PRICE_WEI = 21 gwei;
 
-    ArcLaunchpad launchpad;
-    MockUSDC usdc;
     address creator = makeAddr("creator");
 
     function setUp() public {
-        deployCodeTo("MockUSDC.sol:MockUSDC", USDC_ADDR);
-        usdc = MockUSDC(USDC_ADDR);
-
-        bytes memory code = vm.getCode(FACTORY_ARTIFACT);
-        address factoryAddr;
-        assembly {
-            factoryAddr := create(0, add(code, 0x20), mload(code))
-        }
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, makeAddr("treasury"), 5_000, address(this), 0, 0);
+        StackConfig memory cfg = _defaultConfig(makeAddr("treasury"), address(this));
+        cfg.protocolFeeBps = 5_000;
+        cfg.launchFee = 0;
+        cfg.referralFeeBps = 0;
+        _deployStack(cfg);
     }
 
     function _launchWith(string memory uri) internal returns (address token, uint256 gasUsed) {
@@ -64,7 +55,8 @@ contract OnchainMetadataTest is Test {
                 feeRecipient: address(0),
                 buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
         gasUsed = before - gasleft();
@@ -96,21 +88,14 @@ contract OnchainMetadataTest is Test {
         console2.log("launch with no image      :", bare, "gas =", _usd(bare));
 
         for (uint256 kb = 2; kb <= 8; kb += 3) {
-            ArcLaunchpad fresh = _freshLaunchpad();
-            uint256 g = _measureOn(fresh, _fakeImageMetadata(kb * 1024));
+            // One pad measures them all: each metadata size mines a different
+            // token address, so no launch collides with another. A second pad
+            // could not open pools anyway -- the hook only knows this one.
+            uint256 g = _measureOn(launchpad, _fakeImageMetadata(kb * 1024));
             console2.log(
                 string.concat("launch with ", vm.toString(kb), "KB image  :"), g, string.concat("gas = ", _usd(g))
             );
         }
-    }
-
-    function _freshLaunchpad() internal returns (ArcLaunchpad) {
-        bytes memory code = vm.getCode(FACTORY_ARTIFACT);
-        address factoryAddr;
-        assembly {
-            factoryAddr := create(0, add(code, 0x20), mload(code))
-        }
-        return new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, makeAddr("treasury"), 5_000, address(this), 0, 0);
     }
 
     function _measureOn(ArcLaunchpad lp, string memory uri) internal returns (uint256 gasUsed) {
@@ -137,7 +122,8 @@ contract OnchainMetadataTest is Test {
                 feeRecipient: address(0),
                 buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
         gasUsed = before - gasleft();
@@ -160,7 +146,7 @@ contract OnchainMetadataTest is Test {
         bool found;
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == keccak256(
-                "Launched(address,address,address,address,string,string,string,uint256,uint256,int24,int24,uint128)"
+                "Launched(address,bytes32,address,address,string,string,string,uint256,uint256,int24,int24,uint128)"
             )) {
                 found = true;
             }

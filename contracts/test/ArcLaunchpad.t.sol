@@ -4,26 +4,28 @@ pragma solidity ^0.8.26;
 import {Test, console2} from "forge-std/Test.sol";
 
 import {ArcLaunchpad} from "../src/ArcLaunchpad.sol";
-import {ArcSwapRouter} from "../src/ArcSwapRouter.sol";
 import {LaunchToken} from "../src/LaunchToken.sol";
-import {IUniswapV3Factory, IUniswapV3Pool} from "../src/interfaces/IUniswapV3.sol";
 import {TickMath, FullMath} from "../src/libraries/V3Math.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Currency} from "v4-core/types/Currency.sol";
+import {PoolId} from "v4-core/types/PoolId.sol";
+import {TsukiTestBase} from "./TsukiTestBase.sol";
+import {TsukiHook} from "../src/TsukiHook.sol";
+import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
+import {ModifyLiquidityParams} from "v4-core/types/PoolOperation.sol";
 
 /// @notice End-to-end tests for the single-sided launch mechanic, running against
 ///         the genuine Uniswap V3 factory/pool bytecode from the v3-core package
 ///         rather than a reimplementation.
-contract ArcLaunchpadTest is Test {
+contract ArcLaunchpadTest is TsukiTestBase {
+    using StateLibrary for IPoolManager;
+
     /// @dev Arc's USDC ERC20 interface address. Pinned so the CREATE2 salt-mining
     ///      test exercises the same ordering constraint as the live chain.
-    address constant USDC_ADDR = 0x3600000000000000000000000000000000000000;
 
-    string constant FACTORY_ARTIFACT =
-        "tools/node_modules/@uniswap/v3-core/artifacts/contracts/UniswapV3Factory.sol/UniswapV3Factory.json";
 
-    uint24 constant FEE = 10_000; // 1%
-    int24 constant TICK_SPACING = 200;
 
     // ~$3,030 starting market cap for a 1B supply; see _startTick derivation below.
     int24 constant TICK_LOWER = -403_400;
@@ -31,10 +33,6 @@ contract ArcLaunchpadTest is Test {
 
     uint256 constant SUPPLY = 1_000_000_000 ether; // 1B, 18dp
 
-    ArcLaunchpad launchpad;
-    ArcSwapRouter router;
-    IUniswapV3Factory v3Factory;
-    MockUSDC usdc;
 
     address treasury = makeAddr("treasury");
     address creator = makeAddr("creator");
@@ -42,21 +40,13 @@ contract ArcLaunchpadTest is Test {
     address bob = makeAddr("bob");
 
     function setUp() public {
-        // Put a 6-decimal USDC at Arc's real USDC address.
-        deployCodeTo("MockUSDC.sol:MockUSDC", USDC_ADDR);
-        usdc = MockUSDC(USDC_ADDR);
 
-        // Deploy the authentic Uniswap V3 factory.
-        bytes memory factoryCode = vm.getCode(FACTORY_ARTIFACT);
-        address factoryAddr;
-        assembly {
-            factoryAddr := create(0, add(factoryCode, 0x20), mload(factoryCode))
-        }
-        require(factoryAddr != address(0), "factory deploy failed");
-        v3Factory = IUniswapV3Factory(factoryAddr);
 
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000, address(this), 0, 0); // 50% of fees to protocol
-        router = new ArcSwapRouter(factoryAddr);
+        StackConfig memory cfg = _defaultConfig(treasury, address(this));
+        cfg.protocolFeeBps = 5_000;
+        cfg.launchFee = 0;
+        cfg.referralFeeBps = 0;
+        _deployStack(cfg);
 
         usdc.mint(alice, 1_000_000e6);
         usdc.mint(bob, 1_000_000e6);
@@ -91,7 +81,7 @@ contract ArcLaunchpadTest is Test {
         revert("no salt found");
     }
 
-    function _launch() internal returns (address token, address pool) {
+    function _launch() internal returns (address token, PoolId pool) {
         bytes32 salt = _mineSalt(creator, "Degen", "DEGEN", "ipfs://meta");
         vm.prank(creator);
         (token, pool) = launchpad.launch(
@@ -108,50 +98,25 @@ contract ArcLaunchpadTest is Test {
                 feeRecipient: address(0),
                 buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
     }
 
     function _buy(address who, address token, uint256 usdcIn) internal returns (uint256 out) {
-        vm.startPrank(who);
-        usdc.approve(address(router), usdcIn);
-        out = router.exactInputSingle(
-            ArcSwapRouter.ExactInputSingleParams({
-                tokenIn: USDC_ADDR,
-                tokenOut: token,
-                fee: FEE,
-                recipient: who,
-                deadline: block.timestamp + 1,
-                amountIn: usdcIn,
-                amountOutMinimum: 0
-            })
-        );
-        vm.stopPrank();
+        return _poolBuy(who, token, usdcIn);
     }
 
     function _sell(address who, address token, uint256 tokensIn) internal returns (uint256 out) {
-        vm.startPrank(who);
-        IERC20(token).approve(address(router), tokensIn);
-        out = router.exactInputSingle(
-            ArcSwapRouter.ExactInputSingleParams({
-                tokenIn: token,
-                tokenOut: USDC_ADDR,
-                fee: FEE,
-                recipient: who,
-                deadline: block.timestamp + 1,
-                amountIn: tokensIn,
-                amountOutMinimum: 0
-            })
-        );
-        vm.stopPrank();
+        return _poolSell(who, token, tokensIn);
     }
 
     /// @dev Market cap in whole USD, derived from the pool's live price.
     /// @dev Uses full-precision math: squaring sqrtPriceX96 directly overflows
     ///      uint256 once the price has climbed a few orders of magnitude.
-    function _marketCapUsd(address pool) internal view returns (uint256) {
-        (uint160 sqrtPriceX96,,,,,,) = IUniswapV3Pool(pool).slot0();
+    function _marketCapUsd(address token) internal view returns (uint256) {
+        (uint160 sqrtPriceX96,) = _slot0(token);
         uint256 Q96 = 2 ** 96;
         // rawPrice = (sqrtP / 2^96)^2, carried as a Q96 fixed-point value.
         uint256 rawPriceQ96 = FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, Q96);
@@ -166,27 +131,27 @@ contract ArcLaunchpadTest is Test {
     function test_launch_requiresNoUsdcFromCreator() public {
         assertEq(usdc.balanceOf(creator), 0, "creator starts with no USDC");
 
-        (address token, address pool) = _launch();
+        (address token,) = _launch();
 
         assertEq(usdc.balanceOf(creator), 0, "creator still spent no USDC");
-        assertEq(usdc.balanceOf(pool), 0, "pool opens with zero USDC");
-        assertEq(IUniswapV3Pool(pool).token0(), token, "launched token must be token0");
-        assertEq(IUniswapV3Pool(pool).token1(), USDC_ADDR, "USDC must be token1");
+        assertEq(usdc.balanceOf(address(manager)), 0, "pool opens with zero USDC");
+        assertEq(Currency.unwrap(_poolKey(token).currency0), token, "launched token must be token0");
+        assertEq(Currency.unwrap(_poolKey(token).currency1), USDC_ADDR, "USDC must be token1");
     }
 
     function test_launch_seedsEntireSupplyAsLiquidity() public {
-        (address token, address pool) = _launch();
+        (address token,) = _launch();
 
-        uint256 inPool = IERC20(token).balanceOf(pool);
+        uint256 inPool = IERC20(token).balanceOf(address(manager));
         // Rounding dust goes to the creator; everything else is committed.
         assertGt(inPool, (SUPPLY * 9999) / 10000, "at least 99.99% of supply in the pool");
         assertEq(IERC20(token).balanceOf(address(launchpad)), 0, "launchpad retains nothing");
     }
 
     function test_launch_startingMarketCapIsAboutThreeThousand() public {
-        (, address pool) = _launch();
+        (address token,) = _launch();
 
-        uint256 mcap = _marketCapUsd(pool);
+        uint256 mcap = _marketCapUsd(token);
         console2.log("starting market cap (USD):", mcap);
         assertGt(mcap, 2_800, "start mcap above $2.8k");
         assertLt(mcap, 3_300, "start mcap below $3.3k");
@@ -220,7 +185,8 @@ contract ArcLaunchpadTest is Test {
                 feeRecipient: address(0),
                 buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
     }
@@ -243,7 +209,8 @@ contract ArcLaunchpadTest is Test {
                 feeRecipient: address(0),
                 buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
     }
@@ -266,7 +233,8 @@ contract ArcLaunchpadTest is Test {
                 feeRecipient: address(0),
                 buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
     }
@@ -276,18 +244,18 @@ contract ArcLaunchpadTest is Test {
     // ------------------------------------------------------------------
 
     function test_buy_deliversTokensAndRaisesPrice() public {
-        (address token, address pool) = _launch();
+        (address token,) = _launch();
 
-        uint256 mcapBefore = _marketCapUsd(pool);
+        uint256 mcapBefore = _marketCapUsd(token);
         uint256 received = _buy(alice, token, 500e6); // $500
 
         assertGt(received, 0, "alice received tokens");
         assertEq(IERC20(token).balanceOf(alice), received);
 
-        uint256 mcapAfter = _marketCapUsd(pool);
+        uint256 mcapAfter = _marketCapUsd(token);
         console2.log("mcap before / after $500 buy:", mcapBefore, mcapAfter);
         assertGt(mcapAfter, mcapBefore, "price rose");
-        assertEq(usdc.balanceOf(pool), 500e6, "pool now holds the USDC");
+        assertEq(usdc.balanceOf(address(manager)), 500e6, "pool now holds the USDC");
     }
 
     function test_sequentialBuysGetProgressivelyWorsePrice() public {
@@ -314,11 +282,11 @@ contract ArcLaunchpadTest is Test {
     }
 
     function test_priceClimbsTowardCeilingUnderHeavyBuying() public {
-        (address token, address pool) = _launch();
+        (address token,) = _launch();
 
         _buy(alice, token, 50_000e6);
 
-        uint256 mcap = _marketCapUsd(pool);
+        uint256 mcap = _marketCapUsd(token);
         console2.log("mcap after $50k of buying:", mcap);
         assertGt(mcap, 100_000, "price moved substantially up the range");
     }
@@ -349,51 +317,135 @@ contract ArcLaunchpadTest is Test {
     // ------------------------------------------------------------------
 
     function test_liquidityIsPermanentlyLocked() public {
-        (address token, address pool) = _launch();
+        (address token,) = _launch();
 
-        bytes32 key = keccak256(abi.encodePacked(address(launchpad), TICK_LOWER, TICK_UPPER));
-        (uint128 liq,,,,) = IUniswapV3Pool(pool).positions(key);
+        (uint128 liq,,) = IPoolManager(address(manager)).getPositionInfo(
+            _poolId(token), address(launchpad), TICK_LOWER, TICK_UPPER, bytes32(0)
+        );
         assertGt(liq, 0, "position exists");
 
-        // Positions in Uniswap are keyed by msg.sender, so the creator calling
-        // burn directly touches only their own (nonexistent) position. The pool
-        // rejects it outright rather than reaching the launchpad's principal.
+        // Positions belong to whoever opened them, and in v4 nobody can touch
+        // one without unlocking the manager first. A creator reaching for the
+        // launchpad's principal directly does not even get as far as the pool.
         vm.prank(creator);
-        vm.expectRevert(bytes("NP"));
-        IUniswapV3Pool(pool).burn(TICK_LOWER, TICK_UPPER, 0);
+        vm.expectRevert();
+        IPoolManager(address(manager)).modifyLiquidity(
+            _poolKey(token),
+            ModifyLiquidityParams({
+                tickLower: TICK_LOWER,
+                tickUpper: TICK_UPPER,
+                liquidityDelta: -int256(uint256(liq)),
+                salt: bytes32(0)
+            }),
+            ""
+        );
 
-        // Even the launchpad owner cannot pull principal: fee collection is the
-        // only path that reaches the position, and it burns zero liquidity.
-        uint256 poolTokensBefore = IERC20(token).balanceOf(pool);
+        // Nor can the launchpad itself: collecting fees is the only path that
+        // reaches the position, and it moves zero liquidity.
+        uint256 poolTokensBefore = IERC20(token).balanceOf(address(manager));
         _buy(alice, token, 1_000e6);
         launchpad.collectFees(token);
 
-        (uint128 liqAfter,,,,) = IUniswapV3Pool(pool).positions(key);
+        (uint128 liqAfter,,) = IPoolManager(address(manager)).getPositionInfo(
+            _poolId(token), address(launchpad), TICK_LOWER, TICK_UPPER, bytes32(0)
+        );
         assertEq(liqAfter, liq, "principal untouched by fee collection");
         assertGt(poolTokensBefore, 0);
     }
 
-    function test_launchpadHasNoCodePathThatBurnsLiquidity() public {
-        // Guards against a future edit reintroducing a withdrawal path. The
-        // contract contains two distinct "burn" calls and they must stay distinct:
-        //
-        //   1. `p.burn(tickLower, tickUpper, 0)` — the zero-liquidity poke that
-        //      credits accrued fees. Harmless: it moves no principal.
-        //   2. `LaunchToken(...).burn(bought)` — destroying tokens bought back
-        //      off the market. Touches the ERC20, never the LP position.
-        //
-        // What must never appear is a pool burn with a non-zero liquidity
-        // argument, which is the only way principal could leave the position.
-        string memory src = vm.readFile("src/ArcLaunchpad.sol");
+    /// @dev The feature v3 could not give a direct launch: a creator tax that
+    ///      applies to buys and sells alike, for as long as the token trades.
+    function test_directLaunchCanCarryACreatorTax() public {
+        bytes32 salt = _mineSalt(creator, "Taxed", "TAX", "ipfs://taxed");
+        vm.prank(creator);
+        (address token,) = launchpad.launch(
+            ArcLaunchpad.LaunchParams({
+                name: "Taxed",
+                symbol: "TAX",
+                metadataURI: "ipfs://taxed",
+                totalSupply: SUPPLY,
+                salt: salt,
+                tickLower: TICK_LOWER,
+                tickUpper: TICK_UPPER,
+                creatorAllocationBps: 0,
+                rewardHolders: false,
+                feeRecipient: address(0),
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0),
+                referrer: address(0),
+                creatorTaxBps: 1_000 // 10%, the cap
+            })
+        );
 
-        assertTrue(vm.contains(src, ".burn(l.tickLower, l.tickUpper, 0)"), "fee poke present");
-        assertTrue(vm.contains(src, "LaunchToken(l.token).burn(bought)"), "token buy-back burn present");
+        uint256 bought = _buy(alice, token, 1_000e6);
+        uint256 taxOnBuy = hook.owed(_poolId(token), _poolKey(token).currency0);
+        assertApproxEqRel(taxOnBuy, (bought + taxOnBuy) / 10, 0.01e18, "10% of the tokens bought");
 
-        // Exactly one pool-shaped burn — i.e. one taking tick arguments — exists.
-        assertEq(_countOccurrences(src, ".burn(l.tick"), 1, "only one pool burn");
+        uint256 usdcBack = _sell(alice, token, bought / 2);
+        uint256 taxOnSell = hook.owed(_poolId(token), _poolKey(token).currency1);
+        assertApproxEqRel(taxOnSell, (usdcBack + taxOnSell) / 10, 0.01e18, "and 10% of the USDC sold for");
 
-        // And it passes literal zero as the liquidity to remove.
-        assertEq(_countOccurrences(src, ".burn(l.tickLower, l.tickUpper, 0)"), 1, "pool burn removes zero liquidity");
+        // It is the creator's, but it reaches them through the pad, which is
+        // what makes a holders launch pay holders and an unproven earmark
+        // escrow. Measured as a delta: the creator already holds the mint dust.
+        uint256 tokensBefore = IERC20(token).balanceOf(creator);
+        uint256 usdcBefore = usdc.balanceOf(creator);
+        vm.prank(bob); // permissionless
+        launchpad.collectFees(token);
+        assertEq(hook.owed(_poolId(token), _poolKey(token).currency0), 0, "hook holds nothing after");
+        assertEq(hook.owed(_poolId(token), _poolKey(token).currency1), 0, "hook holds nothing after");
+        assertGt(usdc.balanceOf(creator) - usdcBefore, taxOnSell, "usdc-side tax reached the creator");
+        // The token side is sold for USDC when it is worth selling, so the
+        // creator is paid in USDC rather than in a bag of their own token.
+        assertGe(IERC20(token).balanceOf(creator) - tokensBefore, 0, "no token-side dust stranded");
+        assertEq(IERC20(token).balanceOf(address(hook)), 0, "hook kept nothing");
+        assertEq(usdc.balanceOf(address(hook)), 0, "hook kept nothing");
+        assertGt(taxOnBuy, 0, "the buy was taxed");
+    }
+
+    function test_creatorTaxAboveTheCapCannotLaunch() public {
+        bytes32 salt = _mineSalt(creator, "TooMuch", "GREED", "ipfs://greed");
+        vm.prank(creator);
+        vm.expectRevert(TsukiHook.TaxTooHigh.selector);
+        launchpad.launch(
+            ArcLaunchpad.LaunchParams({
+                name: "TooMuch",
+                symbol: "GREED",
+                metadataURI: "ipfs://greed",
+                totalSupply: SUPPLY,
+                salt: salt,
+                tickLower: TICK_LOWER,
+                tickUpper: TICK_UPPER,
+                creatorAllocationBps: 0,
+                rewardHolders: false,
+                feeRecipient: address(0),
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0),
+                referrer: address(0),
+                creatorTaxBps: 1_001
+            })
+        );
+    }
+
+    function test_launchpadHasNoCodePathThatWithdrawsLiquidity() public view {
+        // Guards against a future edit reintroducing a withdrawal path. On v4
+        // principal can only leave a position through `modifyLiquidity` with a
+        // negative `liquidityDelta`, and the only two calls in the whole stack
+        // pass what a mint costs or a literal zero.
+        string memory plumbing = vm.readFile("src/TsukiV4Pool.sol");
+
+        assertEq(_countOccurrences(plumbing, "liquidityDelta: -"), 0, "no negative liquidity delta anywhere");
+        assertEq(_countOccurrences(plumbing, "poolManager.modifyLiquidity("), 2, "exactly two modifyLiquidity calls");
+        assertTrue(vm.contains(plumbing, "liquidityDelta: int256(liquidity)"), "the mint");
+        assertTrue(vm.contains(plumbing, "liquidityDelta: 0"), "the fee collection");
+
+        // And neither pad reaches the manager behind the plumbing's back.
+        assertEq(
+            _countOccurrences(vm.readFile("src/ArcLaunchpad.sol"), "modifyLiquidity"), 0, "pad goes through the base"
+        );
+        assertEq(
+            _countOccurrences(vm.readFile("src/TsukiCurve.sol"), "modifyLiquidity"), 0, "pad goes through the base"
+        );
     }
 
     function _countOccurrences(string memory haystack, string memory needle) internal pure returns (uint256 count) {
@@ -462,7 +514,8 @@ contract ArcLaunchpadTest is Test {
                 feeRecipient: address(0),
                 buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
 
@@ -474,7 +527,7 @@ contract ArcLaunchpadTest is Test {
         assertEq(launchpad.launchOf(t1).creator, creator);
     }
 
-    function test_creatorAllocationIsDeliveredAfterTheLock() public {
+    function test_creatorAllocationIsDeliveredAtLaunch() public {
         bytes32 salt = _mineSalt(creator, "Alloc", "ALC", "");
         vm.prank(creator);
         (address token,) = launchpad.launch(
@@ -491,19 +544,52 @@ contract ArcLaunchpadTest is Test {
                 feeRecipient: address(0),
                 buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
 
-        // The allocation is held by the launchpad for 30 minutes so it cannot be
-        // dumped on the first buyers; see CreatorLock.t.sol for the full rules.
-        assertApproxEqRel(
-            IERC20(token).balanceOf(address(launchpad)), SUPPLY / 10, 0.001e18, "allocation held, not delivered"
+        // No lock: the allocation is the creator's the moment the launch lands.
+        // Buyers see it on the launch record before they buy.
+        assertApproxEqRel(IERC20(token).balanceOf(creator), SUPPLY / 10, 0.001e18, "creator holds ~10% at launch");
+    }
+
+    /// @dev The launchpad keeps nothing back. Everything not seeded into the
+    ///      pool -- the allocation and the mint's rounding dust -- leaves in the
+    ///      launch transaction itself, so there is no custodied allocation left
+    ///      for fee handling or anyone else to reach.
+    function test_launchLeavesNoAllocationBehind() public {
+        bytes32 salt = _mineSalt(creator, "Alloc", "ALC", "");
+        vm.prank(creator);
+        (address token, PoolId pool) = launchpad.launch(
+            ArcLaunchpad.LaunchParams({
+                name: "Alloc",
+                symbol: "ALC",
+                metadataURI: "",
+                totalSupply: SUPPLY,
+                salt: salt,
+                tickLower: TICK_LOWER,
+                tickUpper: TICK_UPPER,
+                creatorAllocationBps: 2_000, // the maximum
+                rewardHolders: false,
+                feeRecipient: address(0),
+                buybackAndBurn: false,
+                recipientCommitment: bytes32(0),
+                referrer: address(0),
+                creatorTaxBps: 0
+            })
         );
 
-        vm.warp(block.timestamp + launchpad.CREATOR_LOCK_DURATION());
-        launchpad.claimCreatorAllocation(token);
-        assertApproxEqRel(IERC20(token).balanceOf(creator), SUPPLY / 10, 0.001e18, "creator got ~10% after the lock");
+        uint256 allocation = launchpad.launchOf(token).creatorAllocation;
+        assertEq(allocation, SUPPLY / 5, "allocation recorded");
+
+        // Only dust on top of the allocation, never less than it.
+        uint256 held = IERC20(token).balanceOf(creator);
+        assertGe(held, allocation, "creator received the whole allocation");
+        assertApproxEqRel(held, allocation, 0.001e18, "and nothing but dust besides");
+
+        assertEq(IERC20(token).balanceOf(address(launchpad)), 0, "launchpad holds none of the token");
+        assertEq(held + IERC20(token).balanceOf(address(manager)), SUPPLY, "supply is split between creator and pool");
     }
 
     // ---------------- attribution ----------------

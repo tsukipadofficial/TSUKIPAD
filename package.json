@@ -6,6 +6,6 @@
     "build": "cd web && pnpm build",
     "chain": "./scripts/local-dev.sh",
     "test": "cd contracts && forge test -vv",
-    "abi": "cd contracts && forge build && node script/gen-abi.mjs"
+    "abi": "cd contracts && forge build && cd .. && node scripts/sync-abi.mjs"
   }
 }

@@ -6,12 +6,14 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import {LaunchToken} from "./LaunchToken.sol";
-import {
-    IUniswapV3Factory,
-    IUniswapV3Pool,
-    IUniswapV3MintCallback,
-    IUniswapV3SwapCallback
-} from "./interfaces/IUniswapV3.sol";
+import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
+
+import {TsukiHook} from "./TsukiHook.sol";
+import {TokenDeployer} from "./TokenDeployer.sol";
+import {TsukiV4Pool} from "./TsukiV4Pool.sol";
 import {TickMath, LiquidityAmounts} from "./libraries/V3Math.sol";
 
 /// @title ArcLaunchpad
@@ -43,8 +45,10 @@ import {TickMath, LiquidityAmounts} from "./libraries/V3Math.sol";
 ///      lapse; there is simply no function that can withdraw it. Swap fees
 ///      accrued by the position remain claimable, split between the creator and
 ///      the protocol treasury.
-contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, ReentrancyGuard {
+contract ArcLaunchpad is TsukiV4Pool, ReentrancyGuard {
     using SafeERC20 for IERC20;
+    using PoolIdLibrary for PoolKey;
+    using StateLibrary for IPoolManager;
 
     // ---------------------------------------------------------------------
     // Immutable configuration
@@ -53,8 +57,9 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     /// @notice The ERC20 interface to Arc's native USDC. Quote asset for every launch.
     address public immutable USDC;
 
-    /// @notice Uniswap V3 factory used to create pools.
-    IUniswapV3Factory public immutable v3Factory;
+    /// @notice Deploys the launch tokens. Only a size measure: carrying the
+    ///         token's creation code here put this contract over the 24KB limit.
+    TokenDeployer public immutable tokenDeployer;
 
     /// @notice Fee tier for every launch pool (1% suits volatile launches).
     uint24 public immutable poolFee;
@@ -73,11 +78,6 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     ///      creators can verify that before launching.
     uint16 public constant MAX_PROTOCOL_FEE_BPS = 5_000; // 50%
 
-    /// @notice How long a creator's allocation is held before they can claim it.
-    /// @dev The allocation is the only supply that is not locked in the pool, so
-    ///      it is the only supply that could be dumped on early buyers. Holding
-    ///      it briefly means the first minutes of trading cannot be front-run by
-    ///      the launcher, without locking founders out of their tokens for good.
     /// @notice The launchpad this contract is. Read by explorers, scanners and
     ///         aggregators to attribute a launch without needing a hard-coded
     ///         address list.
@@ -87,8 +87,6 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     ///      deployed it.
     string public constant PAD = "TSUKIPAD";
     string public constant PAD_URL = "https://tsukipad.com";
-
-    uint64 public constant CREATOR_LOCK_DURATION = 30 minutes;
 
     // ---------------------------------------------------------------------
     // Mutable configuration
@@ -128,7 +126,9 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
 
     struct Launch {
         address token;
-        address pool;
+        /// @dev The launch's v4 pool. Pools have no address of their own -- the
+        ///      manager holds them all -- so this is the id of the pool key.
+        PoolId pool;
         address creator;
         /// @dev Who receives the creator share of swap fees. Defaults to the
         ///      creator, but may point at a project, charity or public good.
@@ -137,18 +137,17 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         int24 tickUpper;
         uint128 liquidity;
         uint64 createdAt;
-        /// @dev Supply withheld for the creator, held by this contract until `unlockAt`.
+        /// @dev Supply withheld from the pool and sent to the creator at launch.
         uint256 creatorAllocation;
-        /// @dev Timestamp after which the allocation can be claimed.
-        uint64 unlockAt;
-        /// @dev Set once the allocation has been claimed.
-        bool allocationClaimed;
         /// @dev Fee mode: buy the token back and burn it.
         bool buybackAndBurn;
         /// @dev Lifetime USDC spent on buy-backs.
         uint256 usdcSpentOnBuybacks;
         /// @dev Lifetime tokens bought back and destroyed.
         uint256 tokensBurned;
+        /// @dev Extra fee the hook charges on every swap of this launch, paid
+        ///      wholly to the fee recipient. Fixed at launch.
+        uint16 creatorTaxBps;
     }
 
     /// @notice Every launch, in creation order.
@@ -193,10 +192,8 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     uint16 public constant MAX_REFERRAL_FEE_BPS = 2_000; // 20%
 
     /// @dev Set only for the duration of a `pool.mint` call, to authenticate the callback.
-    address private _mintingPool;
 
     /// @dev Set only for the duration of a buy-back `pool.swap`, likewise.
-    address private _swappingPool;
 
     // ---------------------------------------------------------------------
     // Events
@@ -204,7 +201,7 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
 
     event Launched(
         address indexed token,
-        address indexed pool,
+        bytes32 indexed poolId,
         address indexed creator,
         address feeRecipient,
         string name,
@@ -219,7 +216,6 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
 
     event HolderRewardsFunded(address indexed token, uint256 usdcAmount);
     event BoughtBackAndBurned(address indexed token, uint256 usdcSpent, uint256 tokensBurned);
-    event CreatorAllocationClaimed(address indexed token, address indexed creator, uint256 amount);
     event FeesCollected(address indexed token, uint256 creatorToken, uint256 creatorUsdc, uint256 protocolToken, uint256 protocolUsdc);
     event ReferralPaid(address indexed token, address indexed referrer, uint256 usdcAmount);
     event FeeRecipientClaimed(address indexed token, address indexed recipient, uint256 tokenAmount, uint256 usdcAmount);
@@ -237,11 +233,11 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     error ZeroSupply();
     error UnauthorizedCallback();
     error UnexpectedUsdcOwed();
+    error NoLiquidityPlaced();
+    error TooMuchSupplyUnplaced();
     error LiquidityCostExceedsBudget();
     error NotALaunch();
     error FeeTooHigh();
-    error StillLocked();
-    error AllocationAlreadyClaimed();
     error NotUnclaimed();
     error NoAttestor();
     error BadAttestation();
@@ -253,14 +249,17 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
 
     constructor(
         address usdc_,
-        address factory_,
+        IPoolManager poolManager_,
+        TsukiHook hook_,
+        TokenDeployer tokenDeployer_,
         uint24 poolFee_,
+        int24 tickSpacing_,
         address treasury_,
         uint16 protocolFeeBps_,
         address attestor_,
         uint256 launchFee_,
         uint16 referralFeeBps_
-    ) {
+    ) TsukiV4Pool(poolManager_, hook_) {
         if (protocolFeeBps_ > MAX_PROTOCOL_FEE_BPS) revert FeeTooHigh();
         if (referralFeeBps_ > MAX_REFERRAL_FEE_BPS || referralFeeBps_ > protocolFeeBps_) {
             revert ReferralFeeTooHigh();
@@ -271,12 +270,10 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         if (treasury_ == address(0) || attestor_ == address(0)) revert ZeroRecipient();
 
         USDC = usdc_;
-        v3Factory = IUniswapV3Factory(factory_);
+        tokenDeployer = tokenDeployer_;
         poolFee = poolFee_;
-
-        int24 spacing = IUniswapV3Factory(factory_).feeAmountTickSpacing(poolFee_);
-        require(spacing != 0, "unsupported fee tier");
-        tickSpacing = spacing;
+        require(tickSpacing_ > 0, "bad tick spacing");
+        tickSpacing = tickSpacing_;
 
         treasury = treasury_;
         protocolFeeBps = protocolFeeBps_;
@@ -325,6 +322,11 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         ///      of swap fees at the rate in force right now. Zero for none.
         ///      Immutable once launched, like everything else about fee routing.
         address referrer;
+        /// @dev Extra fee on every swap, in bps, paid wholly to the fee
+        ///      recipient. Charged by the pool's hook, so it applies to buys and
+        ///      sells alike for as long as the launch exists. Zero for none;
+        ///      capped by the hook at TsukiHook.MAX_CREATOR_TAX_BPS.
+        uint16 creatorTaxBps;
     }
 
     /// @notice Deploy a token, open its USDC pool, and seed it with single-sided liquidity.
@@ -333,7 +335,7 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     ///      `msg.sender` so nobody can grief a pending launch by claiming its salt first.
     /// @return token The deployed token.
     /// @return pool The Uniswap V3 pool now holding all launch liquidity.
-    function launch(LaunchParams calldata params) external nonReentrant returns (address token, address pool) {
+    function launch(LaunchParams calldata params) external nonReentrant returns (address token, PoolId pool) {
         if (params.totalSupply == 0) revert ZeroSupply();
         if (params.creatorAllocationBps > MAX_CREATOR_ALLOCATION_BPS) revert AllocationTooLarge();
         if (params.tickLower >= params.tickUpper) revert TickOrder();
@@ -344,47 +346,60 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         }
 
         // --- deploy token -------------------------------------------------
-        token = address(
-            new LaunchToken{salt: _saltFor(msg.sender, params.salt)}(
-                params.name,
-                params.symbol,
-                params.totalSupply,
-                params.metadataURI,
-                msg.sender,
-                USDC,
-                params.rewardHolders
-            )
+        token = tokenDeployer.deployLaunchToken(
+            _saltFor(msg.sender, params.salt),
+            params.name,
+            params.symbol,
+            params.totalSupply,
+            params.metadataURI,
+            msg.sender,
+            USDC,
+            params.rewardHolders,
+            address(hook)
         );
 
         // token0 must be the launched token for the single-sided math to hold.
         if (token >= USDC) revert BadTokenOrdering();
 
         // --- create and open pool ----------------------------------------
-        if (v3Factory.getPool(token, USDC, poolFee) != address(0)) revert PoolExists();
-        pool = v3Factory.createPool(token, USDC, poolFee);
-        IUniswapV3Pool(pool).initialize(TickMath.getSqrtRatioAtTick(params.tickLower));
+        // The hook refuses to initialize a pool it has not been told about, and
+        // only this contract can tell it, so a launch's pool cannot exist before
+        // this line -- nobody can open it first at a price of their choosing.
+        PoolKey memory key = _key(token, USDC, poolFee, tickSpacing);
+        pool = key.toId();
+        // The pad, not the creator, is the hook's registered recipient. The tax
+        // then arrives here and leaves through the same routing as every other
+        // fee this launch earns -- to holders if the launch promised that, to
+        // escrow if the recipient is still an unproven commitment, to a burn if
+        // the launch buys back. Registering the creator directly would route
+        // around all three: an earmarked launch would strand its tax in this
+        // contract forever, and a holders launch would quietly pay its creator.
+        _openPool(key, TickMath.getSqrtRatioAtTick(params.tickLower), address(this), params.creatorTaxBps);
 
-        // Register the pool before any tokens reach it, so its (permanently
-        // locked) balance never accrues holder rewards that nobody could claim.
-        LaunchToken(token).setPool(pool);
+        // Register the liquidity's home before any tokens reach it, so its
+        // (permanently locked) balance never accrues holder rewards that nobody
+        // could claim. Every v4 pool's tokens live in the manager.
+        LaunchToken(token).setPool(address(poolManager));
 
         // --- seed single-sided liquidity ---------------------------------
         uint256 creatorAmount = (params.totalSupply * params.creatorAllocationBps) / 10_000;
         uint256 liquiditySupply = params.totalSupply - creatorAmount;
 
-        uint128 liquidity = LiquidityAmounts.getLiquidityForAmount0(
-            TickMath.getSqrtRatioAtTick(params.tickLower),
-            TickMath.getSqrtRatioAtTick(params.tickUpper),
-            liquiditySupply
-        );
-
-        _mintingPool = pool;
-        (uint256 spent0, uint256 spent1) =
-            IUniswapV3Pool(pool).mint(address(this), params.tickLower, params.tickUpper, liquidity, abi.encode(token, liquiditySupply));
-        _mintingPool = address(0);
+        (uint256 spent0, uint256 spent1, uint128 liquidity) =
+            _mintLocked(key, params.tickLower, params.tickUpper, liquiditySupply, 0);
 
         // Pool must never ask for USDC: the range sits entirely above spot.
         if (spent1 != 0) revert UnexpectedUsdcOwed();
+        if (spent0 > liquiditySupply) revert LiquidityCostExceedsBudget();
+
+        // Everything except the declared allocation has to actually reach the
+        // pool. Liquidity is computed from the range, and for an extreme enough
+        // range the rounding keeps a real share of the supply instead of dust --
+        // which would hand the creator supply the launch says they do not have,
+        // with `creatorAllocation` still reporting the declared figure. A launch
+        // that cannot place its liquidity is refused rather than quietly skewed.
+        if (liquidity == 0) revert NoLiquidityPlaced();
+        if (liquiditySupply - spent0 > liquiditySupply / 1_000) revert TooMuchSupplyUnplaced();
 
         // --- record ------------------------------------------------------
         launches.push(
@@ -400,11 +415,10 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
                 liquidity: liquidity,
                 createdAt: uint64(block.timestamp),
                 creatorAllocation: creatorAmount,
-                unlockAt: uint64(block.timestamp) + CREATOR_LOCK_DURATION,
-                allocationClaimed: creatorAmount == 0,
                 buybackAndBurn: params.buybackAndBurn,
                 usdcSpentOnBuybacks: 0,
-                tokensBurned: 0
+                tokensBurned: 0,
+                creatorTaxBps: params.creatorTaxBps
             })
         );
         _launchIndexPlusOne[token] = launches.length;
@@ -419,17 +433,15 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
             referralOf[token] = Referral({referrer: params.referrer, bps: referralFeeBps});
         }
 
-        // The allocation stays here until the lock expires. Only the rounding
-        // dust left over from the mint goes out now, so the launchpad holds
-        // exactly what it owes the creator.
+        // The allocation, plus the rounding dust left over from the mint, goes
+        // to the creator now. Buyers can see the allocation on the launch before
+        // they buy, which is the protection that matters.
         uint256 remainder = IERC20(token).balanceOf(address(this));
-        if (remainder > creatorAmount) {
-            IERC20(token).safeTransfer(msg.sender, remainder - creatorAmount);
-        }
+        if (remainder > 0) IERC20(token).safeTransfer(msg.sender, remainder);
 
         emit Launched(
             token,
-            pool,
+            PoolId.unwrap(pool),
             msg.sender,
             params.recipientCommitment != bytes32(0)
                 ? address(0)
@@ -443,18 +455,6 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
             params.tickUpper,
             liquidity
         );
-    }
-
-    /// @inheritdoc IUniswapV3MintCallback
-    function uniswapV3MintCallback(uint256 amount0Owed, uint256 amount1Owed, bytes calldata data) external override {
-        if (msg.sender != _mintingPool || _mintingPool == address(0)) revert UnauthorizedCallback();
-
-        (address token, uint256 budget) = abi.decode(data, (address, uint256));
-
-        if (amount1Owed != 0) revert UnexpectedUsdcOwed();
-        if (amount0Owed > budget) revert LiquidityCostExceedsBudget();
-
-        IERC20(token).safeTransfer(msg.sender, amount0Owed);
     }
 
     // ---------------------------------------------------------------------
@@ -475,10 +475,14 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         // them without weakening the promise the launch made.
         bool unclaimed = recipientCommitment[token] != bytes32(0) && l.feeRecipient == address(0);
 
-        IUniswapV3Pool p = IUniswapV3Pool(l.pool);
-        p.burn(l.tickLower, l.tickUpper, 0);
-        (uint128 owed0, uint128 owed1) =
-            p.collect(address(this), l.tickLower, l.tickUpper, type(uint128).max, type(uint128).max);
+        PoolKey memory key = _key(l.token, USDC, poolFee, tickSpacing);
+        (uint256 owed0, uint256 owed1) = _collect(key, l.tickLower, l.tickUpper);
+
+        // The creator tax the hook has been holding comes home in the same call.
+        // It is not split with the treasury -- all of it is the creator's -- but
+        // it follows the same routing, so a holders launch pays holders and an
+        // unproven earmark escrows instead of stranding.
+        (uint256 tax0, uint256 tax1) = _pullHookTax(key, token);
 
         // The token side is converted to USDC before anything is split, so every
         // payout is denominated in USDC and nobody is left holding a bag of a
@@ -543,14 +547,35 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         // old behaviour, now only a fallback.
         if (creator0 > 0) {
             if (unclaimed) escrowToken[token] += creator0;
-            else IERC20(l.token).safeTransfer(l.feeRecipient, creator0);
+            else {
+                try IERC20(l.token).transfer(l.feeRecipient, creator0) returns (bool ok) {
+                    if (!ok) escrowToken[token] += creator0;
+                } catch {
+                    escrowToken[token] += creator0;
+                }
+            }
         }
         if (protocol0 > 0) IERC20(l.token).safeTransfer(treasury, protocol0);
+
+        creator0 += tax0;
+        creator1 += tax1;
 
         // USDC-side fees follow the mode chosen at launch.
         if (creator1 > 0) {
             if (burning) {
-                _buybackAndBurn(idxPlusOne - 1, creator1);
+                // Anything the pool could not absorb is not lost: it falls
+                // through to the recipient like an ordinary USDC fee.
+                uint256 unspent = _buybackAndBurn(idxPlusOne - 1, creator1);
+                if (unspent > 0) {
+                    if (unclaimed) escrowUsdc[token] += unspent;
+                    else {
+                        try IERC20(USDC).transfer(l.feeRecipient, unspent) returns (bool ok) {
+                            if (!ok) escrowUsdc[token] += unspent;
+                        } catch {
+                            escrowUsdc[token] += unspent;
+                        }
+                    }
+                }
             } else if (LaunchToken(l.token).rewardsEnabled()) {
                 IERC20(USDC).safeTransfer(l.token, creator1);
                 LaunchToken(l.token).notifyRewards();
@@ -558,7 +583,17 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
             } else if (unclaimed) {
                 escrowUsdc[token] += creator1;
             } else {
-                IERC20(USDC).safeTransfer(l.feeRecipient, creator1);
+                // Never let the creator's own address block the call. Arc's USDC
+                // is a Circle predeploy with a freeze list, and a frozen
+                // recipient used to take the treasury's share and the referrer's
+                // down with it -- permanently, since the recipient is immutable.
+                // Held instead, claimable by the same address once it can
+                // receive again.
+                try IERC20(USDC).transfer(l.feeRecipient, creator1) returns (bool ok) {
+                    if (!ok) escrowUsdc[token] += creator1;
+                } catch {
+                    escrowUsdc[token] += creator1;
+                }
             }
         }
         // Pay the referrer before the treasury, and never let them block it. A
@@ -580,6 +615,18 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         emit FeesCollected(token, creator0, creator1, protocol0, protocol1);
     }
 
+    /// @dev Claim whatever creator tax the hook holds for this launch.
+    ///      Permissionless there and here; the hook only ever pays the address
+    ///      it recorded at launch, which is this contract.
+    function _pullHookTax(PoolKey memory key, address token) private returns (uint256 tax0, uint256 tax1) {
+        PoolId id = key.toId();
+        tax0 = hook.owed(id, key.currency0);
+        tax1 = hook.owed(id, key.currency1);
+        if (tax0 == 0 && tax1 == 0) return (0, 0);
+        hook.claim(key);
+        token; // the balances are already known from `owed`; nothing to re-read
+    }
+
     /// @dev Whether a buy-back can actually execute right now.
     ///
     ///      Once the curve is fully bought out the pool holds no more of the
@@ -589,7 +636,7 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     ///      share down with it. So a sold-out pool falls back to paying the fee
     ///      recipient in USDC instead of burning.
     function _canBuyBack(Launch memory l) private view returns (bool) {
-        (, int24 tick,,,,,) = IUniswapV3Pool(l.pool).slot0();
+        (, int24 tick,,) = poolManager.getSlot0(l.pool);
         return tick < l.tickUpper;
     }
 
@@ -602,28 +649,31 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     ///      The price limit is left wide open because the amount is a fee
     ///      skim — small relative to the pool — and any output is burned, so
     ///      there is no slippage victim to protect.
-    function _buybackAndBurn(uint256 index, uint256 usdcAmount) private {
+    /// @return unspent USDC the pool could not absorb, still owed to the launch.
+    function _buybackAndBurn(uint256 index, uint256 usdcAmount) private returns (uint256 unspent) {
         Launch storage l = launches[index];
 
-        _swappingPool = l.pool;
-        // zeroForOne = false: paying token1 (USDC) to receive token0 (the token).
-        // Stop at the top of the launch range: there is no liquidity above it,
-        // so a wider limit only risks running the price into the global maximum.
-        (int256 amount0,) = IUniswapV3Pool(l.pool).swap(
-            address(this),
+        // zeroForOne = false: paying currency1 (USDC) to receive currency0 (the
+        // token). The pad is exempt from its own launches' creator tax, so a
+        // buy-back burns everything the USDC bought rather than handing a slice
+        // of it back to the creator.
+        //
+        // Stopped at the top of the launch range: there is no liquidity above
+        // it, so a wider limit lets a large buy-back run the price into the
+        // global maximum, spend less than it was handed, strand the difference
+        // here and knock the launch out of buy-back mode for good.
+        (uint256 spent, uint256 bought) = _swapExactIn(
+            _key(l.token, USDC, poolFee, tickSpacing),
             false,
-            int256(usdcAmount),
-            TickMath.getSqrtRatioAtTick(l.tickUpper),
-            abi.encode(l.token)
+            usdcAmount,
+            TickMath.getSqrtRatioAtTick(l.tickUpper)
         );
-        _swappingPool = address(0);
-
-        uint256 bought = uint256(-amount0);
+        unspent = usdcAmount - spent;
         if (bought > 0) {
             LaunchToken(l.token).burn(bought);
-            l.usdcSpentOnBuybacks += usdcAmount;
+            l.usdcSpentOnBuybacks += spent;
             l.tokensBurned += bought;
-            emit BoughtBackAndBurned(l.token, usdcAmount, bought);
+            emit BoughtBackAndBurned(l.token, spent, bought);
         }
     }
 
@@ -635,9 +685,9 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
     /// @dev Sell exactly `amountIn` of a launch's token back into its own pool.
     ///
     ///      `amountIn` is always the amount collected in *this* call and never a
-    ///      balance lookup. The launchpad also custodies creator allocations
-    ///      awaiting unlock and escrow for unclaimed launches, all in the same
-    ///      token; selling `balanceOf(this)` would quietly spend those.
+    ///      balance lookup. The launchpad also custodies escrow for unclaimed
+    ///      launches in the same token; selling `balanceOf(this)` would quietly
+    ///      spend it.
     ///
     ///      Returns what was sold and what came back. A swap that cannot execute
     ///      returns zero rather than reverting: fees are collected on behalf of
@@ -647,59 +697,18 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         private
         returns (uint256 sold, uint256 usdcOut)
     {
-        _swappingPool = l.pool;
-        // zeroForOne = true: paying token0 (the token) to receive token1 (USDC).
-        // Stop at the bottom of the launch range -- there is no liquidity below
-        // it, and the price should never be pushed under the opening tick.
-        try IUniswapV3Pool(l.pool).swap(
-            address(this),
-            true,
-            int256(amountIn),
-            TickMath.getSqrtRatioAtTick(l.tickLower),
-            abi.encode(l.token)
-        ) returns (int256 amount0, int256 amount1) {
-            sold = uint256(amount0);
-            usdcOut = uint256(-amount1);
+        // zeroForOne = true: paying currency0 (the token) to receive currency1
+        // (USDC). Routed through `swapForSelf` so a pool that cannot execute the
+        // swap leaves fee collection working instead of reverting it.
+        try this.swapForSelf(_key(l.token, USDC, poolFee, tickSpacing), true, amountIn) returns (
+            uint256 sold_, uint256 out_
+        ) {
+            sold = sold_;
+            usdcOut = out_;
         } catch {
             sold = 0;
             usdcOut = 0;
         }
-        _swappingPool = address(0);
-    }
-
-    /// @inheritdoc IUniswapV3SwapCallback
-    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external override {
-        if (msg.sender != _swappingPool || _swappingPool == address(0)) revert UnauthorizedCallback();
-
-        // The launchpad swaps in both directions now: it buys the token back
-        // with USDC for buy-and-burn, and sells collected token fees for USDC so
-        // that every payout is denominated in USDC. Exactly one side is ever
-        // owed, and the pool is already authenticated by `_swappingPool`.
-        if (amount0Delta > 0) {
-            IERC20(abi.decode(data, (address))).safeTransfer(msg.sender, uint256(amount0Delta));
-        } else if (amount1Delta > 0) {
-            IERC20(USDC).safeTransfer(msg.sender, uint256(amount1Delta));
-        } else {
-            revert UnexpectedUsdcOwed();
-        }
-    }
-
-    /// @notice Release a creator's locked allocation once the lock has expired.
-    /// @dev Permissionless: anyone may trigger it, but the tokens only ever go to
-    ///      the creator recorded at launch.
-    function claimCreatorAllocation(address token) external nonReentrant {
-        uint256 idxPlusOne = _launchIndexPlusOne[token];
-        if (idxPlusOne == 0) revert NotALaunch();
-        Launch storage l = launches[idxPlusOne - 1];
-
-        if (l.allocationClaimed) revert AllocationAlreadyClaimed();
-        if (block.timestamp < l.unlockAt) revert StillLocked();
-
-        uint256 amount = l.creatorAllocation;
-        l.allocationClaimed = true;
-        if (amount > 0) IERC20(token).safeTransfer(l.creator, amount);
-
-        emit CreatorAllocationClaimed(token, l.creator, amount);
     }
 
     // ---------------------------------------------------------------------
@@ -740,14 +749,11 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         bool rewardHolders,
         bytes32 salt
     ) external view returns (address) {
-        bytes32 initCodeHash = keccak256(
-            abi.encodePacked(
-                type(LaunchToken).creationCode,
-                abi.encode(name, symbol, totalSupply, metadataURI, creator, USDC, rewardHolders)
-            )
+        bytes32 initCodeHash = tokenDeployer.launchTokenInitCodeHash(
+            name, symbol, totalSupply, metadataURI, creator, USDC, rewardHolders, address(this), address(hook)
         );
         return address(
-            uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), _saltFor(creator, salt), initCodeHash))))
+            uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(tokenDeployer), _saltFor(creator, salt), initCodeHash))))
         );
     }
 
@@ -760,11 +766,8 @@ contract ArcLaunchpad is IUniswapV3MintCallback, IUniswapV3SwapCallback, Reentra
         string calldata metadataURI,
         bool rewardHolders
     ) external view returns (bytes32) {
-        return keccak256(
-            abi.encodePacked(
-                type(LaunchToken).creationCode,
-                abi.encode(name, symbol, totalSupply, metadataURI, creator, USDC, rewardHolders)
-            )
+        return tokenDeployer.launchTokenInitCodeHash(
+            name, symbol, totalSupply, metadataURI, creator, USDC, rewardHolders, address(this), address(hook)
         );
     }
 

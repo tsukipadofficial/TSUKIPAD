@@ -99,19 +99,30 @@ contract LaunchToken is ERC20, ERC20Permit {
         string memory metadataURI_,
         address creator_,
         address rewardToken_,
-        bool rewardsEnabled_
+        bool rewardsEnabled_,
+        /// @dev The pad this token answers to. Passed in rather than taken from
+        ///      msg.sender because the pads deploy through TokenDeployer, which
+        ///      always supplies its own caller -- so this is still the pad, and
+        ///      still impossible for anyone else to claim.
+        address launchpad_,
+        /// @dev The pool's hook, which holds accrued creator tax between claims.
+        ///      Excluded from rewards for the same reason the pad and the pool
+        ///      are: rewards credited to a contract with no claim path are
+        ///      rewards nobody can ever take out.
+        address taxCollector_
     ) ERC20(name_, symbol_) ERC20Permit(name_) {
         metadataURI = metadataURI_;
         creator = creator_;
-        launchpad = msg.sender;
+        launchpad = launchpad_;
         rewardToken = rewardToken_;
         rewardsEnabled = rewardsEnabled_;
 
         // The launchpad holds the supply only in transit to the pool, and the
         // pool's position is locked forever — neither should earn.
-        excludedFromRewards[msg.sender] = true;
+        excludedFromRewards[launchpad_] = true;
+        if (taxCollector_ != address(0)) excludedFromRewards[taxCollector_] = true;
 
-        _mint(msg.sender, totalSupply_);
+        _mint(launchpad_, totalSupply_);
     }
 
     /// @notice Record the pool address so it can be excluded from rewards.
@@ -224,7 +235,7 @@ contract LaunchToken is ERC20, ERC20Permit {
         _rewardPerSharePaid[account] = rewardPerShareStored;
     }
 
-    function _update(address from, address to, uint256 value) internal override {
+    function _update(address from, address to, uint256 value) internal virtual override {
         if (!rewardsEnabled) {
             super._update(from, to, value);
             return;

@@ -4,10 +4,23 @@
 
 A fair-launch token launchpad for [Arc](https://arc.io), Circle's stablecoin L1.
 
-Tokens launch **directly into a real Uniswap V3 USDC pool** at a ~$3K market cap,
-seeded entirely with single-sided liquidity. The creator supplies no USDC, there
-is no presale, no bonding-curve contract, and no "graduation" step — the token is
-tradeable through any router or aggregator from its first block.
+Two ways to launch, both free and both ending in a permanently locked
+Uniswap V3 USDC pool:
+
+- **Bonding curve** (default). Trades on a constant-product curve from a ~$3.2K
+  market cap. Once **$10,400** has been raised the curve sells out and, in the
+  same transaction, that USDC plus the last 20% of supply become a full-range
+  Uniswap V3 position at the curve's final price — a **~$52K market cap** — with
+  no price jump and no migration step. Transfers open at graduation, so nobody
+  can seed the pool ahead of it. A 99% snipe tax on the first five seconds
+  (quartered every second) makes launch-block bots unprofitable; the creator,
+  their fee recipient and any wallets they declare are exempt, so a launch can
+  open with a developer buy.
+- **Direct pool**. Launches **straight into a real Uniswap V3 USDC pool** at a
+  ~$3K market cap, seeded entirely with single-sided liquidity. Tradeable through
+  any router or aggregator from its first block.
+
+The creator supplies no USDC either way, and there is no presale.
 
 ---
 
@@ -69,8 +82,10 @@ what actually fills (`test_curveExhaustsAndDoesNotOverchargeTheBuyer`).
 ```
 contracts/          Foundry project
   src/
-    ArcLaunchpad.sol      launch + registry + fee collection
+    ArcLaunchpad.sol      direct launch + registry + fee collection
+    TsukiCurve.sol        bonding curve: trading, graduation, fee collection
     LaunchToken.sol       fixed-supply ERC20, no mint/owner/tax
+    CurveToken.sol        LaunchToken whose transfers open at graduation
     ArcSwapRouter.sol     minimal single-hop router (testnet only)
     libraries/V3Math.sol  TickMath/FullMath/LiquidityAmounts ported to 0.8
   script/
@@ -103,8 +118,10 @@ import into your wallet (network: `http://127.0.0.1:8545`, chain id `5042002`).
 cd contracts && forge test -vv
 ```
 
-18 tests, run against the **genuine** Uniswap V3 factory and pool bytecode from
-the `@uniswap/v3-core` package rather than a reimplementation.
+124 tests, run against the **genuine** Uniswap V3 factory and pool bytecode
+from the `@uniswap/v3-core` package rather than a reimplementation. The curve
+suite covers graduation at the curve price, front-run pools above and below it,
+solvency under fuzzed buy/sell sequences, and the snipe tax schedule.
 
 ---
 
@@ -126,6 +143,17 @@ The script writes `contracts/deployments/5042002.json`; copy the addresses into
 ```
 NEXT_PUBLIC_LAUNCHPAD_ADDRESS=0x...
 NEXT_PUBLIC_SWAP_ROUTER_ADDRESS=0x...
+NEXT_PUBLIC_CURVE_ADDRESS=0x...
+```
+
+To add the bonding curve next to a launchpad that is already live (without
+redeploying it and losing its launches), use the curve-only script. It reads the
+factory and treasury from the deployments file and writes the curve back into it:
+
+```bash
+PRIVATE_KEY=0xyour_testnet_key \
+  forge script script/DeployCurve.s.sol:DeployCurve \
+  --rpc-url arc_testnet --broadcast
 ```
 
 ---

@@ -59,17 +59,28 @@ else
 fi
 
 echo "==> deploying launchpad stack"
+# No V4_POOL_MANAGER here, so the script brings up its own Uniswap v4 -- neither
+# Arc testnet nor a fresh anvil has one.
 PRIVATE_KEY="$KEY" forge script script/Deploy.s.sol:Deploy \
   --rpc-url "$RPC" --broadcast --skip-simulation >/dev/null
 
-LAUNCHPAD=$(node -e "process.stdout.write(require('./deployments/$CHAIN_ID.json').launchpad)")
-ROUTER=$(node -e "process.stdout.write(require('./deployments/$CHAIN_ID.json').swapRouter)")
+field() { node -e "process.stdout.write(require('./deployments/$CHAIN_ID.json').$1)"; }
+LAUNCHPAD=$(field launchpad)
+ROUTER=$(field swapRouter)
+CURVE=$(field curve)
+HOOK=$(field hook)
+MANAGER=$(field poolManager)
+STATE_VIEW=$(field stateView)
+QUOTER=$(field quoter)
+TOKEN_DEPLOYER=$(field tokenDeployer)
 echo "    launchpad $LAUNCHPAD"
+echo "    curve     $CURVE"
+echo "    hook      $HOOK"
 echo "    router    $ROUTER"
 
 echo "==> seeding demo launches"
 PRIVATE_KEY="$KEY" LAUNCHPAD="$LAUNCHPAD" ROUTER="$ROUTER" \
-  forge script script/SeedDemo.s.sol:SeedDemo \
+  HOOK="$HOOK" forge script script/SeedDemo.s.sol:SeedDemo \
   --rpc-url "$RPC" --broadcast --skip-simulation 2>&1 | grep -E "^  " || true
 
 cat > "$ROOT/web/.env.local" <<EOF
@@ -77,6 +88,13 @@ cat > "$ROOT/web/.env.local" <<EOF
 NEXT_PUBLIC_RPC_URL=$RPC
 NEXT_PUBLIC_LAUNCHPAD_ADDRESS=$LAUNCHPAD
 NEXT_PUBLIC_SWAP_ROUTER_ADDRESS=$ROUTER
+NEXT_PUBLIC_CURVE_ADDRESS=$CURVE
+NEXT_PUBLIC_HOOK_ADDRESS=$HOOK
+NEXT_PUBLIC_POOL_MANAGER_ADDRESS=$MANAGER
+NEXT_PUBLIC_STATE_VIEW_ADDRESS=$STATE_VIEW
+NEXT_PUBLIC_QUOTER_ADDRESS=$QUOTER
+NEXT_PUBLIC_TOKEN_DEPLOYER_ADDRESS=$TOKEN_DEPLOYER
+NEXT_PUBLIC_SITE_OPEN=1
 EOF
 
 echo

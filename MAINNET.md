@@ -96,7 +96,8 @@ Do not assume testnet values carry over.
 
 ## 5. Contract size — currently 734 bytes of headroom
 
-`ArcLaunchpad` is 23,842 bytes against the 24,576 EIP-170 limit. A deploy that
+`ArcLaunchpad` is ~23,000 bytes and `TsukiCurve` ~23,550 against the 24,576
+EIP-170 limit. A deploy that
 exceeds it **fails silently, producing an empty contract** — this already
 happened once during development.
 
@@ -121,7 +122,8 @@ happened once during development.
 ## 7. Frontend cutover
 
 - [ ] `web/lib/config.ts` — chain, RPC, explorer, USDC
-- [ ] Vercel env: `NEXT_PUBLIC_LAUNCHPAD_ADDRESS`, `NEXT_PUBLIC_SWAP_ROUTER_ADDRESS`
+- [ ] Vercel env: `NEXT_PUBLIC_LAUNCHPAD_ADDRESS`, `NEXT_PUBLIC_SWAP_ROUTER_ADDRESS`,
+      `NEXT_PUBLIC_CURVE_ADDRESS`
 - [ ] `web/lib/brand.ts` — `SITE_URL` if the domain changed
 - [ ] Remove the testnet disclaimer from the footer (`footer.disclaimer`) —
       it currently says tokens have no value, which stops being true

@@ -32,3 +32,5 @@ mobile/.env
 # 480 PNGs per piece has no business in git history.
 marketing/frames*/
 marketing/*.wav
+__pycache__/
+*.pyc

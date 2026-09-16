@@ -4,27 +4,22 @@ pragma solidity ^0.8.26;
 import {Test, console2} from "forge-std/Test.sol";
 
 import {ArcLaunchpad} from "../src/ArcLaunchpad.sol";
-import {ArcSwapRouter} from "../src/ArcSwapRouter.sol";
 import {LaunchToken} from "../src/LaunchToken.sol";
-import {IUniswapV3Factory} from "../src/interfaces/IUniswapV3.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Currency} from "v4-core/types/Currency.sol";
+import {PoolId} from "v4-core/types/PoolId.sol";
+import {TsukiTestBase} from "./TsukiTestBase.sol";
+import {TsukiRouter} from "../src/TsukiRouter.sol";
 
 /// @notice Tests for redirecting the creator fee share to a third party — a
 ///         project, charity or public good rather than the launcher's wallet.
-contract FeeRecipientTest is Test {
-    address constant USDC_ADDR = 0x3600000000000000000000000000000000000000;
-    string constant FACTORY_ARTIFACT =
-        "tools/node_modules/@uniswap/v3-core/artifacts/contracts/UniswapV3Factory.sol/UniswapV3Factory.json";
+contract FeeRecipientTest is TsukiTestBase {
 
-    uint24 constant FEE = 10_000;
     int24 constant TICK_LOWER = -403_400;
     int24 constant TICK_UPPER = -334_400;
     uint256 constant SUPPLY = 1_000_000_000 ether;
 
-    ArcLaunchpad launchpad;
-    ArcSwapRouter router;
-    MockUSDC usdc;
 
     address treasury = makeAddr("treasury");
     address creator = makeAddr("creator");
@@ -32,16 +27,11 @@ contract FeeRecipientTest is Test {
     address alice = makeAddr("alice");
 
     function setUp() public {
-        deployCodeTo("MockUSDC.sol:MockUSDC", USDC_ADDR);
-        usdc = MockUSDC(USDC_ADDR);
-
-        bytes memory code = vm.getCode(FACTORY_ARTIFACT);
-        address factoryAddr;
-        assembly {
-            factoryAddr := create(0, add(code, 0x20), mload(code))
-        }
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000, address(this), 0, 0);
-        router = new ArcSwapRouter(factoryAddr);
+        StackConfig memory cfg = _defaultConfig(treasury, address(this));
+        cfg.protocolFeeBps = 5_000;
+        cfg.launchFee = 0;
+        cfg.referralFeeBps = 0;
+        _deployStack(cfg);
 
         usdc.mint(alice, 500_000e6);
     }
@@ -72,7 +62,8 @@ contract FeeRecipientTest is Test {
                 feeRecipient: feeRecipient,
                 buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
         token = LaunchToken(t);
@@ -82,14 +73,29 @@ contract FeeRecipientTest is Test {
         vm.startPrank(who);
         usdc.approve(address(router), usdcIn);
         out = router.exactInputSingle(
-            ArcSwapRouter.ExactInputSingleParams({
-                tokenIn: USDC_ADDR,
-                tokenOut: token,
-                fee: FEE,
-                recipient: who,
-                deadline: block.timestamp + 1,
+            TsukiRouter.ExactInputSingleParams({
+                key: _poolKey(token),
+                zeroForOne: false,
                 amountIn: usdcIn,
-                amountOutMinimum: 0
+                amountOutMinimum: 0,
+                recipient: who,
+                deadline: block.timestamp + 1
+            })
+        );
+        vm.stopPrank();
+    }
+
+    function _sell(address who, address token, uint256 tokensIn) internal returns (uint256 out) {
+        vm.startPrank(who);
+        IERC20(token).approve(address(router), tokensIn);
+        out = router.exactInputSingle(
+            TsukiRouter.ExactInputSingleParams({
+                key: _poolKey(token),
+                zeroForOne: true,
+                amountIn: tokensIn,
+                amountOutMinimum: 0,
+                recipient: who,
+                deadline: block.timestamp + 1
             })
         );
         vm.stopPrank();
@@ -140,14 +146,13 @@ contract FeeRecipientTest is Test {
         vm.startPrank(alice);
         IERC20(address(token)).approve(address(router), bought);
         router.exactInputSingle(
-            ArcSwapRouter.ExactInputSingleParams({
-                tokenIn: address(token),
-                tokenOut: USDC_ADDR,
-                fee: FEE,
-                recipient: alice,
-                deadline: block.timestamp + 1,
+            TsukiRouter.ExactInputSingleParams({
+                key: _poolKey(address(token)),
+                zeroForOne: true,
                 amountIn: bought,
-                amountOutMinimum: 0
+                amountOutMinimum: 0,
+                recipient: alice,
+                deadline: block.timestamp + 1
             })
         );
         vm.stopPrank();
@@ -183,14 +188,13 @@ contract FeeRecipientTest is Test {
         vm.startPrank(alice);
         IERC20(address(token)).approve(address(router), bought);
         router.exactInputSingle(
-            ArcSwapRouter.ExactInputSingleParams({
-                tokenIn: address(token),
-                tokenOut: USDC_ADDR,
-                fee: FEE,
-                recipient: alice,
-                deadline: block.timestamp + 1,
+            TsukiRouter.ExactInputSingleParams({
+                key: _poolKey(address(token)),
+                zeroForOne: true,
                 amountIn: bought,
-                amountOutMinimum: 0
+                amountOutMinimum: 0,
+                recipient: alice,
+                deadline: block.timestamp + 1
             })
         );
         vm.stopPrank();
@@ -206,11 +210,13 @@ contract FeeRecipientTest is Test {
         assertEq(token.balanceOf(treasury), 0, "treasury holds none of the token");
     }
 
-    /// @dev The launchpad custodies creator allocations awaiting unlock, so a fee
-    ///      swap must sell only what this collection produced. Selling a balance
-    ///      lookup instead would quietly spend somebody else's locked allocation.
-    function test_feeSwapNeverTouchesALockedCreatorAllocation() public {
-        // A launch that withholds 10% of supply for its creator.
+    /// @dev The launchpad custodies token fees in escrow for earmarked launches
+    ///      nobody has claimed yet, so a fee swap must sell only what this
+    ///      collection produced. Selling a balance lookup instead would quietly
+    ///      spend that escrow -- and the escrow is the very token the next
+    ///      collection on the same launch sells.
+    function test_feeSwapNeverTouchesEscrowedTokenFees() public {
+        // An earmarked launch: its fees are held until a recipient claims them.
         bytes32 salt;
         for (uint256 i = 0; i < 5_000; i++) {
             if (launchpad.predictTokenAddress(creator, "Held", "HELD", SUPPLY, "", false, bytes32(i)) < USDC_ADDR) {
@@ -232,47 +238,30 @@ contract FeeRecipientTest is Test {
                 rewardHolders: false,
                 feeRecipient: address(0),
                 buybackAndBurn: false,
-                recipientCommitment: bytes32(0),
-                referrer: address(0)
+                recipientCommitment: keccak256("x:held"),
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
+        assertEq(IERC20(held).balanceOf(address(launchpad)), 0, "nothing held at launch");
 
-        uint256 owedToCreator = launchpad.launchOf(held).creatorAllocation;
-        assertGt(owedToCreator, 0, "allocation is being custodied");
-        assertEq(IERC20(held).balanceOf(address(launchpad)), owedToCreator, "held exactly");
+        // Sells too small to be worth converting leave the token side in kind,
+        // so the creator's share of them lands in escrow as tokens.
+        uint256 bought = _buy(alice, held, 10_000e6);
+        for (uint256 i = 0; i < 4; i++) {
+            _sell(alice, held, 0.05 ether);
+            launchpad.collectFees(held);
+        }
 
-        // Churn a *different* launch enough to trigger a fee swap.
-        LaunchToken other = _launch(goodCause, false);
-        uint256 bought = _buy(alice, address(other), 10_000e6);
-        vm.startPrank(alice);
-        IERC20(address(other)).approve(address(router), bought);
-        router.exactInputSingle(
-            ArcSwapRouter.ExactInputSingleParams({
-                tokenIn: address(other),
-                tokenOut: USDC_ADDR,
-                fee: FEE,
-                recipient: alice,
-                deadline: block.timestamp + 1,
-                amountIn: bought,
-                amountOutMinimum: 0
-            })
-        );
-        vm.stopPrank();
-        launchpad.collectFees(address(other));
+        uint256 escrowed = launchpad.escrowToken(held);
+        assertGt(escrowed, 0, "token fees are being custodied");
+        assertEq(IERC20(held).balanceOf(address(launchpad)), escrowed, "held exactly");
 
-        assertEq(
-            IERC20(held).balanceOf(address(launchpad)),
-            owedToCreator,
-            "the other launch's allocation is untouched"
-        );
+        // Now a sell large enough that collecting it swaps the token side.
+        _sell(alice, held, bought / 2);
+        launchpad.collectFees(held);
 
-        // Compare the delta: the creator also received mint dust at launch, so
-        // their balance was never just the allocation.
-        uint256 before = IERC20(held).balanceOf(creator);
-        vm.warp(block.timestamp + 31 minutes);
-        launchpad.claimCreatorAllocation(held);
-        assertEq(
-            IERC20(held).balanceOf(creator) - before, owedToCreator, "creator still receives all of it"
-        );
+        assertEq(launchpad.escrowToken(held), escrowed, "the new token fees were sold, not escrowed");
+        assertEq(IERC20(held).balanceOf(address(launchpad)), escrowed, "the escrow is untouched by the fee swap");
     }
 }

@@ -14,14 +14,13 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const out = join(root, "contracts", "out");
-const uni = join(root, "contracts", "tools", "node_modules", "@uniswap", "v3-core", "artifacts", "contracts");
-
-/** Only the pool members the app actually reads; the full ABI is enormous. */
-const POOL_KEEP = new Set([
-  "burn", "collect", "fee", "initialize", "liquidity", "mint", "positions",
-  "slot0", "swap", "tickSpacing", "token0", "token1",
-  // Needed to compute fees that have accrued but not yet been credited.
-  "ticks", "feeGrowthGlobal0X128", "feeGrowthGlobal1X128",
+/** v4 keeps every pool inside one manager, so the app reads pool state through
+ *  StateView and prices through the quoter rather than from a pool contract. */
+const STATE_VIEW_KEEP = new Set([
+  "getSlot0", "getLiquidity", "getPositionInfo", "getPositionLiquidity",
+  // v4 hands back the growth inside a range directly, so the app no longer
+  // reimplements Uniswap's tick math to work out uncollected fees.
+  "getFeeGrowthInside", "getFeeGrowthGlobals", "getTickInfo",
 ]);
 
 const ERC20_KEEP = new Set(["name", "symbol", "decimals", "totalSupply", "balanceOf", "allowance", "approve", "transfer"]);
@@ -44,9 +43,14 @@ const emit = (name, abi) =>
   parts.push(`export const ${name} = ${JSON.stringify(abi)} as const;\n`);
 
 emit("launchpadAbi", load(out, "ArcLaunchpad"));
-emit("swapRouterAbi", load(out, "ArcSwapRouter"));
+emit("swapRouterAbi", load(out, "TsukiRouter"));
 emit("launchTokenAbi", load(out, "LaunchToken"));
-emit("uniswapV3PoolAbi", keep(load(uni, "UniswapV3Pool"), POOL_KEEP).filter((e) => e.type === "function"));
+emit("curveAbi", load(out, "TsukiCurve"));
+emit("curveTokenAbi", load(out, "CurveToken"));
+emit("hookAbi", load(out, "TsukiHook"));
+emit("poolManagerAbi", load(out, "PoolManager"));
+emit("stateViewAbi", keep(load(out, "StateView"), STATE_VIEW_KEEP).filter((e) => e.type === "function"));
+emit("quoterAbi", load(out, "V4Quoter"));
 emit("erc20Abi", keep(load(out, "LaunchToken"), ERC20_KEEP).filter((e) => e.type === "function"));
 
 writeFileSync(join(root, "web", "lib", "abi.ts"), parts.join("\n"));

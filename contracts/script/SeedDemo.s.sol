@@ -5,13 +5,19 @@ import {Script, console2} from "forge-std/Script.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {ArcLaunchpad} from "../src/ArcLaunchpad.sol";
-import {ArcSwapRouter} from "../src/ArcSwapRouter.sol";
+import {TsukiRouter} from "../src/TsukiRouter.sol";
+import {TsukiHook} from "../src/TsukiHook.sol";
+import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {IHooks} from "v4-core/interfaces/IHooks.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {Currency} from "v4-core/types/Currency.sol";
 
 /// @notice Fills a local chain with a spread of launches at different points in
 ///         their curve, so the UI can be developed against realistic state.
 contract SeedDemo is Script {
     address constant USDC = 0x3600000000000000000000000000000000000000;
     uint24 constant FEE = 10_000;
+    int24 constant TICK_SPACING = 200;
     uint256 constant SUPPLY = 1_000_000_000 ether;
 
     /// @dev A real 128x128 JPEG, embedded to exercise the fully on-chain image path.
@@ -32,7 +38,8 @@ contract SeedDemo is Script {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address me = vm.addr(pk);
         ArcLaunchpad launchpad = ArcLaunchpad(vm.envAddress("LAUNCHPAD"));
-        ArcSwapRouter router = ArcSwapRouter(vm.envAddress("ROUTER"));
+        TsukiRouter router = TsukiRouter(vm.envAddress("ROUTER"));
+        address hook = vm.envAddress("HOOK");
 
         // Two of these share swap fees with holders, so the UI has both modes to render.
         // Mixed modes so every UI state is represented: creator-fee, holder-reward,
@@ -49,7 +56,7 @@ contract SeedDemo is Script {
         vm.startBroadcast(pk);
 
         for (uint256 i = 0; i < demos.length; i++) {
-            _seedOne(launchpad, router, me, demos[i], i == 4 ? 500 : 0);
+            _seedOne(launchpad, router, hook, me, demos[i], i == 4 ? 500 : 0);
         }
 
         vm.stopBroadcast();
@@ -59,7 +66,8 @@ contract SeedDemo is Script {
     /// @dev Split out of the loop to keep the stack shallow under via-ir.
     function _seedOne(
         ArcLaunchpad launchpad,
-        ArcSwapRouter router,
+        TsukiRouter router,
+        address hook,
         address me,
         Demo memory d,
         uint16 allocationBps
@@ -88,21 +96,27 @@ contract SeedDemo is Script {
                 feeRecipient: d.feeRecipient,
                 buybackAndBurn: false,
                 recipientCommitment: bytes32(0),
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
 
         if (d.buyUsdc > 0) {
             IERC20(USDC).approve(address(router), d.buyUsdc);
             router.exactInputSingle(
-                ArcSwapRouter.ExactInputSingleParams({
-                    tokenIn: USDC,
-                    tokenOut: token,
-                    fee: FEE,
-                    recipient: me,
-                    deadline: block.timestamp + 600,
+                TsukiRouter.ExactInputSingleParams({
+                    key: PoolKey({
+                        currency0: Currency.wrap(token),
+                        currency1: Currency.wrap(USDC),
+                        fee: FEE,
+                        tickSpacing: TICK_SPACING,
+                        hooks: IHooks(hook)
+                    }),
+                    zeroForOne: false,
                     amountIn: d.buyUsdc,
-                    amountOutMinimum: 0
+                    amountOutMinimum: 0,
+                    recipient: me,
+                    deadline: block.timestamp + 600
                 })
             );
         }

@@ -4,28 +4,24 @@ pragma solidity ^0.8.26;
 import {Test, console2} from "forge-std/Test.sol";
 
 import {ArcLaunchpad} from "../src/ArcLaunchpad.sol";
-import {ArcSwapRouter} from "../src/ArcSwapRouter.sol";
 import {LaunchToken} from "../src/LaunchToken.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Currency} from "v4-core/types/Currency.sol";
+import {PoolId} from "v4-core/types/PoolId.sol";
+import {TsukiTestBase} from "./TsukiTestBase.sol";
+import {TsukiRouter} from "../src/TsukiRouter.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /// @notice A launch may earmark its fees for someone who has no wallet yet.
 ///         Fees are held until an attestation binds an address to the identity.
 ///         These tests are mostly about what must *not* work.
-contract FeeRecipientClaimTest is Test {
-    address constant USDC_ADDR = 0x3600000000000000000000000000000000000000;
-    string constant FACTORY_ARTIFACT =
-        "tools/node_modules/@uniswap/v3-core/artifacts/contracts/UniswapV3Factory.sol/UniswapV3Factory.json";
+contract FeeRecipientClaimTest is TsukiTestBase {
 
-    uint24 constant FEE = 10_000;
     int24 constant TICK_LOWER = -403_400;
     int24 constant TICK_UPPER = -334_400;
     uint256 constant SUPPLY = 1_000_000_000 ether;
 
-    ArcLaunchpad launchpad;
-    ArcSwapRouter router;
-    MockUSDC usdc;
 
     address treasury = makeAddr("treasury");
     address creator = makeAddr("creator");
@@ -41,17 +37,11 @@ contract FeeRecipientClaimTest is Test {
 
     function setUp() public {
         attestor = vm.addr(attestorKey);
-
-        deployCodeTo("MockUSDC.sol:MockUSDC", USDC_ADDR);
-        usdc = MockUSDC(USDC_ADDR);
-
-        bytes memory code = vm.getCode(FACTORY_ARTIFACT);
-        address factoryAddr;
-        assembly {
-            factoryAddr := create(0, add(code, 0x20), mload(code))
-        }
-        launchpad = new ArcLaunchpad(USDC_ADDR, factoryAddr, FEE, treasury, 5_000, attestor, 0, 0);
-        router = new ArcSwapRouter(factoryAddr);
+        StackConfig memory cfg = _defaultConfig(treasury, attestor);
+        cfg.protocolFeeBps = 5_000;
+        cfg.launchFee = 0;
+        cfg.referralFeeBps = 0;
+        _deployStack(cfg);
 
         usdc.mint(alice, 500_000e6);
     }
@@ -88,7 +78,8 @@ contract FeeRecipientClaimTest is Test {
                 feeRecipient: address(0),
                 buybackAndBurn: false,
                 recipientCommitment: commitment,
-                referrer: address(0)
+                referrer: address(0),
+                creatorTaxBps: 0
             })
         );
         token = LaunchToken(t);
@@ -98,14 +89,13 @@ contract FeeRecipientClaimTest is Test {
         vm.startPrank(who);
         usdc.approve(address(router), usdcIn);
         router.exactInputSingle(
-            ArcSwapRouter.ExactInputSingleParams({
-                tokenIn: USDC_ADDR,
-                tokenOut: token,
-                fee: FEE,
-                recipient: who,
-                deadline: block.timestamp + 1,
+            TsukiRouter.ExactInputSingleParams({
+                key: _poolKey(token),
+                zeroForOne: false,
                 amountIn: usdcIn,
-                amountOutMinimum: 0
+                amountOutMinimum: 0,
+                recipient: who,
+                deadline: block.timestamp + 1
             })
         );
         vm.stopPrank();
@@ -225,7 +215,7 @@ contract FeeRecipientClaimTest is Test {
         uint64 deadline = uint64(block.timestamp + 1 hours);
         bytes memory sig = _sign(attestorKey, address(token), maintainer, COMMITMENT, deadline);
 
-        vm.warp(block.timestamp + 2 hours);
+        vm.warp(vm.getBlockTimestamp() + 2 hours);
         vm.expectRevert(ArcLaunchpad.AttestationExpired.selector);
         launchpad.claimFeeRecipient(address(token), maintainer, deadline, sig);
     }
@@ -245,7 +235,7 @@ contract FeeRecipientClaimTest is Test {
         launchpad.collectFees(address(token));
 
         uint256 creatorBefore = usdc.balanceOf(creator);
-        vm.warp(block.timestamp + 366 days);
+        vm.warp(vm.getBlockTimestamp() + 366 days);
         launchpad.sweepUnclaimedFees(address(token));
 
         assertGt(usdc.balanceOf(treasury), 0, "treasury swept it");
@@ -274,7 +264,7 @@ contract FeeRecipientClaimTest is Test {
         uint256 treasuryBefore = usdc.balanceOf(treasury);
         uint256 attackerBefore = usdc.balanceOf(attacker);
 
-        vm.warp(block.timestamp + 366 days);
+        vm.warp(vm.getBlockTimestamp() + 366 days);
         vm.prank(attacker);
         launchpad.sweepUnclaimedFees(address(token));
 
