@@ -28,14 +28,14 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/// Arc's public RPC accepts 20,000 and rejects 50,000, despite its own error
-/// text advertising 100,000.
-const CHUNK = 20_000n;
+/// Arc's public RPC refuses anything over 10,000 blocks now; it accepted 20,000
+/// when this was written. Held a little under the ceiling on purpose.
+const CHUNK = 9_000n;
 
 /// ~0.51s blocks, so one chunk is ~170 minutes. Six of them reach back roughly
 /// 17 hours -- enough to show a launch's whole trading life on testnet. The walk
 /// stops as soon as MAX_TRADES are found, so a busy pool costs one request.
-const MAX_CHUNKS = 6;
+const MAX_CHUNKS = 13;
 const MAX_TRADES = 30;
 
 /// The launchpad swaps against the pool itself, converting the token-side fees

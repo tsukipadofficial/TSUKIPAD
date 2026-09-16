@@ -1,8 +1,8 @@
 /// Turning pool Swap events into positions, incrementally.
 ///
-/// Arc produces ~169,000 blocks a day and the RPC caps eth_getLogs at 20,000
-/// blocks, so keeping current costs roughly nine calls per pool per day before
-/// any backfill. That budget, not the arithmetic, is what shapes this file:
+/// Arc produces ~169,000 blocks a day and the RPC caps eth_getLogs at 10,000
+/// blocks, so keeping current costs roughly seventeen calls per pool per day
+/// before any backfill. That budget, not the arithmetic, is what shapes this file:
 /// every run is bounded, every pool keeps its own cursor, and a run that is cut
 /// short resumes exactly where it stopped rather than starting again.
 ///
@@ -33,13 +33,14 @@ export const CURVE_TRADE_EVENT = parseAbiItem(
   "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 usdcAmount, uint256 tokenAmount, uint256 fee, uint256 tokensSold, uint256 usdcRaised)",
 );
 
-/// The RPC accepts 20,000; the hook that reads trades in the browser found 50,000
-/// fails despite the node advertising 100,000.
-const CHUNK = 20_000n;
+/// Arc's public endpoint refuses anything over 10,000 blocks ("requested range
+/// too large"), and dRPC's free tier the same. It accepted 20,000 when this was
+/// written, so the ceiling can move -- held a little under it on purpose.
+const CHUNK = 9_000n;
 
 /// Bounded so one run cannot outlive a serverless invocation. Whatever is left
 /// is picked up next tick.
-const MAX_CHUNKS_PER_RUN = 12;
+const MAX_CHUNKS_PER_RUN = 26;
 const MAX_POOLS_PER_RUN = 8;
 
 export const K = {
