@@ -32,6 +32,7 @@ import {
   DEFAULT_SUPPLY,
   DEFAULT_START_MCAP_USD,
   DEFAULT_CEILING_MULTIPLE,
+  MAX_CREATOR_TAX_BPS,
   isDeployed,
   isCurveDeployed,
   chain,
@@ -128,7 +129,11 @@ export default function CreatePage() {
   const devBuyOk = usdcBalance === undefined || devBuyWei <= (usdcBalance as bigint);
   const curveWalletValid = curveWallet.trim() === "" || isAddress(curveWallet.trim());
   const creatorTaxBps = Math.round(creatorTaxPct * 100);
-  const maxTaxBps = curveConfig?.maxCreatorTaxBps ?? 500;
+  // The hook rejects anything above MAX_CREATOR_TAX_BPS, so a form that lets a
+  // number through above it is only selling somebody a reverted launch and the
+  // gas it cost. A direct launch has no curve config to read, so the ceiling
+  // comes from the same constant the hook enforces.
+  const maxTaxBps = onCurve ? (curveConfig?.maxCreatorTaxBps ?? MAX_CREATOR_TAX_BPS) : MAX_CREATOR_TAX_BPS;
   const creatorTaxOk = creatorTaxBps >= 0 && creatorTaxBps <= maxTaxBps;
   const exemptFull = exempt.length >= (curveConfig?.maxSnipeExempt ?? 16);
 
@@ -228,7 +233,10 @@ export default function CreatePage() {
   const symbolOk = /^[A-Z0-9]{2,10}$/.test(symbol.trim().toUpperCase());
   const wrongChain = isConnected && chainId !== chain.id;
   const canSubmit =
-    (onCurve ? !!curveConfig && curveWalletValid && creatorTaxOk && devBuyOk : isDeployed && recipientValid) &&
+    // creatorTaxOk applies to both launch types: the tax is charged by the same
+    // hook either way, and it was previously only checked on the curve path.
+    creatorTaxOk &&
+    (onCurve ? !!curveConfig && curveWalletValid && devBuyOk : isDeployed && recipientValid) &&
     isConnected &&
     !wrongChain &&
     nameOk &&
@@ -515,7 +523,14 @@ export default function CreatePage() {
                   max={maxTaxBps / 100}
                   step={0.5}
                   value={creatorTaxPct}
-                  onChange={(e) => setCreatorTaxPct(Number(e.target.value))}
+                  onChange={(e) => {
+                    // Clamped here rather than only validated: `max` on a number
+                    // input stops the spinner, not typing, and 30 in this box is
+                    // a launch that reverts.
+                    const v = Number(e.target.value);
+                    if (Number.isNaN(v)) return setCreatorTaxPct(0);
+                    setCreatorTaxPct(Math.min(Math.max(v, 0), maxTaxBps / 100));
+                  }}
                   className="tabular w-full bg-transparent px-3 py-2 text-sm outline-none"
                 />
                 <span className="px-3 text-sm text-muted">%</span>
