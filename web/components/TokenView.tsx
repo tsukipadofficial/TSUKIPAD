@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useReadContract } from "wagmi";
 import Link from "next/link";
 import { zeroAddress, zeroHash } from "viem";
 import type { Address } from "viem";
 
 import { Badge, Button, Card, CurveBar, LiveDot, Skeleton, Stat, cx } from "./ui";
+import dynamic from "next/dynamic";
 import { CurvePreview } from "./CurvePreview";
 import { TokenMark } from "./LaunchCard";
 import { TradePanel } from "./TradePanel";
@@ -23,9 +24,13 @@ import { tickToHumanPrice } from "@/lib/launch-math";
 import { decodeMetadata, safeImageUrl, beneficiaryLink, telegramUrl } from "@/lib/metadata";
 import { useI18n } from "@/lib/i18n";
 
+const PriceChart = dynamic(() => import("./PriceChart").then((m) => m.PriceChart), { ssr: false });
+
 export function TokenView({ token }: { token: Address }) {
   const { t, lang } = useI18n();
   const { launch, isLoading, notFound, error } = useLaunch(token);
+  // Candles by default; the liquidity curve is one click away.
+  const [view, setView] = useState<"chart" | "curve">("chart");
 
   // What the escrow is holding. Without this the page showed uncollected fees
   // going to zero after a collection and said nothing about where they went,
@@ -256,23 +261,44 @@ export function TokenView({ token }: { token: Address }) {
         {/* ---------------- left ---------------- */}
         <div className="space-y-6">
           <Card className="p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <p className="eyebrow">{t("token.priceCurve")}</p>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="flex border-2 border-line" role="tablist">
+                {(["chart", "curve"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    role="tab"
+                    aria-selected={view === v}
+                    onClick={() => setView(v)}
+                    className={
+                      "px-3 py-1 text-xs font-bold uppercase tracking-wider transition-colors " +
+                      (view === v ? "bg-lime text-void" : "text-muted hover:text-ink")
+                    }
+                  >
+                    {t(v === "chart" ? "token.chartTab" : "token.curveTab")}
+                  </button>
+                ))}
+              </div>
               <span className="tabular text-xs text-muted">
                 {t("token.supplySold", { pct: `${(launch.curveProgress * 100).toFixed(1)}%` })}
               </span>
             </div>
 
-            <CurvePreview
-              startTick={launch.tickLower}
-              endTick={launch.tickUpper}
-              startMcap={launch.startMarketCapUsd}
-              ceilingMcap={launch.ceilingMarketCapUsd}
-              progress={launch.curveProgress}
-              capacityUsd={launch.remainingCapacityUsd}
-            />
-
-            <CurveBar progress={launch.curveProgress} className="mt-4" />
+            {view === "chart" ? (
+              <PriceChart token={launch.token} openingMcap={launch.startMarketCapUsd} />
+            ) : (
+              <>
+                <CurvePreview
+                  startTick={launch.tickLower}
+                  endTick={launch.tickUpper}
+                  startMcap={launch.startMarketCapUsd}
+                  ceilingMcap={launch.ceilingMarketCapUsd}
+                  progress={launch.curveProgress}
+                  capacityUsd={launch.remainingCapacityUsd}
+                />
+                <CurveBar progress={launch.curveProgress} className="mt-4" />
+              </>
+            )}
 
             <div className="mt-5 grid grid-cols-2 gap-5 border-t-2 border-line pt-4 sm:grid-cols-4">
               <Stat label={t("token.price")} value={formatTokenPrice(price)} accent="lime" />

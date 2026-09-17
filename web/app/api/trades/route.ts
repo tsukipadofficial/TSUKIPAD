@@ -19,6 +19,7 @@ import { SWAP_EVENT } from "@/lib/indexer";
 import {
   CURVE_ADDRESS,
   LAUNCHPAD_ADDRESS,
+  POOL_MANAGER_ADDRESS,
   SWAP_ROUTER_ADDRESS,
   TOKEN_DECIMALS,
   USDC_DECIMALS,
@@ -58,6 +59,24 @@ export const maxDuration = 30;
 /// from PNL for the same reason.
 const NOT_A_TRADER = new Set([LAUNCHPAD_ADDRESS.toLowerCase(), CURVE_ADDRESS.toLowerCase()]);
 
+/// Uniswap's own record of every swap in a pool, whichever router made it. Our
+/// router's `Swapped` event names the trader, but a trade through BasedBot or
+/// Uniswap's interface never touches our router and used to be missing from the
+/// tape entirely. Those are read here and credited to the wallet that sent the
+/// transaction.
+const POOL_SWAP_EVENT = parseAbiItem(
+  "event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)",
+);
+
+/// Swaps whose PoolManager `sender` is one of ours: the router's trades are
+/// already on the tape with the real trader, and the pads' own swaps (fee
+/// conversion, buy-backs, dev buys) are bookkeeping, not trades.
+const OUR_SENDERS = new Set([
+  SWAP_ROUTER_ADDRESS.toLowerCase(),
+  LAUNCHPAD_ADDRESS.toLowerCase(),
+  CURVE_ADDRESS.toLowerCase(),
+]);
+
 /// A trade against a bonding curve, before the launch graduates into its pool.
 const CURVE_TRADE_EVENT = parseAbiItem(
   "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 usdcAmount, uint256 tokenAmount, uint256 fee, uint256 tokensSold, uint256 usdcRaised)",
@@ -88,7 +107,7 @@ export async function GET(req: Request) {
   }
 
   const client = indexerClient();
-  const cacheKey = `${MARKET_KEY_PREFIX}tape:v5:${(pool ?? "").toLowerCase()}:${(token ?? "").toLowerCase()}`;
+  const cacheKey = `${MARKET_KEY_PREFIX}tape:v6:${(pool ?? "").toLowerCase()}:${(token ?? "").toLowerCase()}`;
 
   try {
     // Typed through helpers rather than inline: `getLogs` only narrows its
@@ -180,12 +199,60 @@ export async function GET(req: Request) {
     let budget = CHUNKS_PER_REQUEST;
     let failure: unknown = null;
 
+    const externalRange = (from: bigint, to: bigint) =>
+      getLogsSplit(
+        (lo, hi) =>
+          client.getLogs({
+            address: POOL_MANAGER_ADDRESS,
+            event: POOL_SWAP_EVENT,
+            args: { id: pool as `0x${string}` },
+            fromBlock: lo,
+            toBlock: hi,
+          }),
+        from,
+        to,
+      );
+
+    /// Trades made around our router. The PoolManager names the router that
+    /// called it, not the person, so the wallet comes from the transaction.
+    const fromExternal = async (logs: Awaited<ReturnType<typeof externalRange>>): Promise<TapeEntry[]> => {
+      const outside = logs.filter((l) => l.args.sender && !OUR_SENDERS.has(l.args.sender.toLowerCase()));
+      // Newest first, and only as many lookups as the tape can ever show.
+      const recent = outside.slice(-MAX_TRADES);
+      const senders = await Promise.all(
+        recent.map((l) =>
+          client
+            .getTransaction({ hash: l.transactionHash as `0x${string}` })
+            .then((tx) => tx.from)
+            .catch(() => l.args.sender as Address),
+        ),
+      );
+      return recent.flatMap((log, i) => {
+        const a = log.args;
+        if (a.amount0 === undefined || a.amount1 === undefined) return [];
+        // Signs are from the swapper's side: paying USDC in is a buy.
+        const buy = a.amount1 < 0n;
+        const abs = (v: bigint) => (v < 0n ? -v : v);
+        return [{
+          id: `${log.transactionHash}-${log.logIndex}`,
+          side: buy ? "buy" : "sell",
+          usdc: Number(formatUnits(abs(a.amount1), USDC_DECIMALS)),
+          tokens: Number(formatUnits(abs(a.amount0), TOKEN_DECIMALS)),
+          who: senders[i],
+          hash: log.transactionHash,
+          blockNumber: Number(log.blockNumber ?? 0n),
+          logIndex: log.logIndex ?? 0,
+        }];
+      });
+    };
+
     const scan = async (lo: bigint, hi: bigint): Promise<TapeEntry[]> => {
-      const [p, c] = await Promise.all([
+      const [p, e, c] = await Promise.all([
         hasPool ? poolRange(lo, hi).then(fromPool) : Promise.resolve([]),
+        hasPool ? externalRange(lo, hi).then(fromExternal) : Promise.resolve([]),
         hasCurve ? curveRange(lo, hi).then(fromCurve) : Promise.resolve([]),
       ]);
-      return [...p, ...c];
+      return [...p, ...e, ...c];
     };
     const absorb = (found: TapeEntry[]) => {
       const seen = new Set(tape.entries.map((e) => e.id));

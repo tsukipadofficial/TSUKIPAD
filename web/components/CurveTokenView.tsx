@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import type { Address } from "viem";
 
 import { Badge, Button, Card, CurveBar, LiveDot, Skeleton, Stat, cx } from "./ui";
@@ -11,12 +12,15 @@ import { CurveTradePanel } from "./CurveTradePanel";
 import { CurveFeesPanel } from "./CurveFeesPanel";
 import { RewardsPanel } from "./RewardsPanel";
 import { CopyAddress } from "./CopyAddress";
-import { useCurveLaunch } from "@/lib/curve";
+import { openingMarketCapUsd, useCurveLaunch } from "@/lib/curve";
 import { useTrades } from "@/lib/useTrades";
 import { EXPLORER_URL } from "@/lib/config";
 import { formatUsd, formatTokenPrice, shortAddress, timeAgo } from "@/lib/format";
 import { decodeMetadata, safeImageUrl, telegramUrl } from "@/lib/metadata";
 import { useI18n } from "@/lib/i18n";
+
+// lightweight-charts touches the DOM, so it loads in the browser only.
+const PriceChart = dynamic(() => import("./PriceChart").then((m) => m.PriceChart), { ssr: false });
 
 /// Token page for a bonding-curve launch, before and after it graduates.
 export function CurveTokenView({ token }: { token: Address }) {
@@ -166,6 +170,13 @@ export function CurveTokenView({ token }: { token: Address }) {
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr] lg:items-start">
         {/* ---------------- left ---------------- */}
         <div className="space-y-6">
+          {/* One chart across the whole life of the token: curve trades first,
+              then the Uniswap pool once it graduates. */}
+          <Card className="p-5">
+            <p className="eyebrow mb-3">{t("token.chartTab")}</p>
+            <PriceChart token={token} openingMcap={config ? openingMarketCapUsd(config) : undefined} />
+          </Card>
+
           <Card className="p-5">
             <div className="mb-3 flex items-center justify-between">
               <p className="eyebrow">{t("curve.progress")}</p>
