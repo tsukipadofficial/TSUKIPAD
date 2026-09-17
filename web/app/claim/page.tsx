@@ -48,6 +48,7 @@ export default function ClaimPage() {
       "not-your-earmark": t("claim.errNotYours"),
       "bad-token": t("claim.errBadToken"),
       "attestor-not-configured": t("claim.errUnavailable"),
+      "attestor-mismatch": t("claim.errUnavailable"),
       "privy-not-configured": t("claim.errUnavailable"),
     })[code] ?? t("claim.errGeneric");
 

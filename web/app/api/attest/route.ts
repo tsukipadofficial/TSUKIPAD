@@ -70,10 +70,33 @@ function handleFor(user: Record<string, unknown>, provider: Provider): string | 
   return found?.username ?? null;
 }
 
+/// Whether this server's signing key is the attestor the live launchpad trusts.
+///
+/// The launchpad's attestor is fixed at deploy, so a key left over from another
+/// deployment signs attestations the contract will always reject -- a claim
+/// that fails at the very last step, after the person has signed in and paid
+/// gas, with nothing on the page to say why. Checked once and remembered.
+let attestorMatches: Promise<boolean> | null = null;
+function checkAttestor(key: `0x${string}`): Promise<boolean> {
+  if (!attestorMatches) {
+    const pub = createPublicClient({ chain, transport: http(RPC_URL) });
+    attestorMatches = (
+      pub.readContract({ address: LAUNCHPAD_ADDRESS, abi: launchpadAbi, functionName: "attestor" }) as Promise<string>
+    )
+      .then((onchain) => getAddress(onchain) === privateKeyToAccount(key).address)
+      .catch(() => {
+        attestorMatches = null; // an RPC hiccup is not a verdict; ask again next time
+        return false;
+      });
+  }
+  return attestorMatches;
+}
+
 export async function POST(req: NextRequest) {
   const key = process.env.ATTESTOR_PRIVATE_KEY;
   if (!key) return bad("attestor-not-configured", 503);
   if (!process.env.PRIVY_APP_SECRET) return bad("privy-not-configured", 503);
+  if (!(await checkAttestor(key as `0x${string}`))) return bad("attestor-mismatch", 503);
 
   let body: { token?: string; provider?: string; recipient?: string; accessToken?: string };
   try {
