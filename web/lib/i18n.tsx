@@ -483,6 +483,8 @@ const STRINGS = {
   // --- referrals --------------------------------------------------------
   "nav.referrals": { en: "Referrals", ja: "紹介" },
   "nav.docs": { en: "Docs", ja: "ドキュメント" },
+  "nav.terms": { en: "Terms", ja: "利用規約" },
+  "nav.privacy": { en: "Privacy", ja: "プライバシー" },
   "ref.title": { en: "Bring people in.", ja: "仲間を連れてくる。" },
   "ref.sub": {
     en: "Share your link. When someone launches a token through it, you earn 10% of that token's swap fees for as long as it trades.",

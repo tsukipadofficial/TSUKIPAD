@@ -19,10 +19,16 @@ export function SiteFooter() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="tabular">{t(IS_MAINNET ? "footer.chain.mainnet" : "footer.chain")}</p>
           <div className="flex items-center gap-4">
-            {/* The header nav is hidden on phones, so the docs are linked here too. */}
-            <a href="/docs" className="font-bold text-muted transition-colors hover:text-lime">
-              {t("nav.docs")}
-            </a>
+            {/* The header nav is hidden on phones, so the docs are linked here too, alongside the legal pages. */}
+            {[
+              { href: "/docs", label: t("nav.docs") },
+              { href: "/terms", label: t("nav.terms") },
+              { href: "/privacy", label: t("nav.privacy") },
+            ].map((l) => (
+              <a key={l.href} href={l.href} className="font-bold text-muted transition-colors hover:text-lime">
+                {l.label}
+              </a>
+            ))}
             {SOCIALS.map((s) => (
               <a
                 key={s.label}
