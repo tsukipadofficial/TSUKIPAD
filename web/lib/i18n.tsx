@@ -71,7 +71,7 @@ const STRINGS = {
 
   "how.title": { en: "How it works", ja: "仕組み" },
   "how.1.t": { en: "Deploy", ja: "デプロイ" },
-  "how.1.b": { en: "Fixed supply, no mint, no owner, no tax.", ja: "固定供給。ミント機能・オーナー権限・税なし。" },
+  "how.1.b": { en: "Fixed supply, no mint, no owner. Tax fixed for life, paid in USDC.", ja: "供給量は固定、追加発行なし、オーナーなし。税率は永久に固定され、USDCで支払われます。" },
   "how.2.t": { en: "Open pool", ja: "プール開設" },
   "how.2.b": { en: "A USDC pool opens at a $2.5K market cap.", ja: "時価総額$2,500でUSDCプールが開きます。" },
   "how.3.t": { en: "Seed", ja: "供給" },
@@ -482,6 +482,7 @@ const STRINGS = {
   "fees.collecting": { en: "Collecting…", ja: "回収中…" },
   // --- referrals --------------------------------------------------------
   "nav.referrals": { en: "Referrals", ja: "紹介" },
+  "nav.docs": { en: "Docs", ja: "ドキュメント" },
   "ref.title": { en: "Bring people in.", ja: "仲間を連れてくる。" },
   "ref.sub": {
     en: "Share your link. When someone launches a token through it, you earn 10% of that token's swap fees for as long as it trades.",

@@ -21,6 +21,7 @@ const NAV = [
   { href: "/create", key: "nav.launch" as const },
   { href: "/leaderboard", key: "nav.leaderboard" as const },
   { href: "/referrals", key: "nav.referrals" as const },
+  { href: "/docs", key: "nav.docs" as const },
 ];
 
 /// Drawn on the same 16×16 grid as the logo mark, square caps, so the switch
