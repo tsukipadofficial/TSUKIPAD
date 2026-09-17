@@ -63,7 +63,9 @@ function handleFor(user: Record<string, unknown>, provider: Provider): string | 
     | { type?: string; username?: string }[]
     | undefined;
   if (!Array.isArray(accounts)) return null;
-  const want = provider === "x" ? "twitter_oauth" : `${provider}_oauth`;
+  // Privy names X "twitter_oauth", and Telegram simply "telegram" -- it is not
+  // an OAuth account in Privy's record.
+  const want = provider === "x" ? "twitter_oauth" : provider === "telegram" ? "telegram" : `${provider}_oauth`;
   const found = accounts.find((a) => a.type === want);
   return found?.username ?? null;
 }
@@ -90,7 +92,13 @@ export async function POST(req: NextRequest) {
   if (!user) return bad("not-signed-in", 401);
 
   const username = handleFor(user, provider);
-  if (!username) return bad("account-not-linked");
+  if (!username) {
+    // A Telegram account can exist without a username, and a launch can only
+    // have earmarked fees for a username. Say which problem it is.
+    const accounts = (user.linked_accounts ?? user.linkedAccounts) as { type?: string }[] | undefined;
+    if (provider === "telegram" && accounts?.some((a) => a.type === "telegram")) return bad("telegram-no-username");
+    return bad("account-not-linked");
+  }
 
   const claimed = commitmentFor(provider, username);
   if (!claimed) return bad("account-not-linked");

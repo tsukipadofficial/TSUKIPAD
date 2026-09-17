@@ -10,15 +10,34 @@
 
 import { keccak256, toHex } from "viem";
 
-export const PROVIDERS = ["x", "github", "discord"] as const;
+export const PROVIDERS = ["x", "github", "discord", "telegram"] as const;
 export type Provider = (typeof PROVIDERS)[number];
 
-/// X caps handles at 15 characters; GitHub allows 39; Discord usernames 32.
-const LIMITS: Record<Provider, number> = { x: 15, github: 39, discord: 32 };
+export const PROVIDER_LABEL: Record<Provider, string> = {
+  x: "X",
+  github: "GitHub",
+  discord: "Discord",
+  telegram: "Telegram",
+};
+
+/// Telegram is offered only once it is a sign-in method, because claiming an
+/// earmark means signing in with that account. Switching it on in the site
+/// before Privy has Telegram credentials would break sign-in for everyone, so
+/// it waits behind NEXT_PUBLIC_PRIVY_TELEGRAM. The server accepts all four
+/// regardless: it only ever verifies an account Privy already linked.
+export const TELEGRAM_ENABLED = process.env.NEXT_PUBLIC_PRIVY_TELEGRAM === "1";
+export const OFFERED_PROVIDERS: readonly Provider[] = PROVIDERS.filter(
+  (p) => p !== "telegram" || TELEGRAM_ENABLED,
+);
+
+/// X caps handles at 15 characters; GitHub allows 39; Discord usernames 32;
+/// Telegram usernames are 5 to 32.
+const LIMITS: Record<Provider, number> = { x: 15, github: 39, discord: 32, telegram: 32 };
 const SHAPE: Record<Provider, RegExp> = {
   x: /^[A-Za-z0-9_]+$/,
   github: /^[A-Za-z0-9-]+$/,
   discord: /^[A-Za-z0-9._]+$/,
+  telegram: /^[A-Za-z0-9_]{5,}$/,
 };
 
 /// Lower-cased and stripped of a leading @, because "@Alice" and "alice" are the
@@ -39,5 +58,7 @@ export function commitmentFor(provider: Provider, raw: string): `0x${string}` | 
 /// Display form, for showing an earmark next to a launch.
 export function labelFor(provider: Provider, raw: string): string {
   const h = normaliseHandle(provider, raw) ?? raw.trim();
-  return provider === "github" ? `github.com/${h}` : `@${h}`;
+  if (provider === "github") return `github.com/${h}`;
+  if (provider === "telegram") return `t.me/${h}`;
+  return `@${h}`;
 }

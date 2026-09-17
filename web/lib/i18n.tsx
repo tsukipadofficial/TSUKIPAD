@@ -554,6 +554,7 @@ const STRINGS = {
     ja: "アカウントは各プロバイダで確認します。ローンチ時に指定されたアカウントのみが、一度だけ受け取れます。",
   },
   "claim.errSignIn": { en: "Sign in again — that session has expired.", ja: "セッションが切れました。再度サインインしてください。" },
+  "claim.errTelegramUsername": { en: "Your Telegram account has no username. Set one in Telegram, then sign in again.", ja: "Telegramアカウントにユーザー名がありません。Telegramで設定してから再度サインインしてください。" },
   "claim.errNotLinked": { en: "No {p} account is linked to this sign-in.", ja: "このサインインに {p} アカウントが連携されていません。" },
   "claim.errNotEarmarked": { en: "That launch did not earmark its fees for anyone.", ja: "そのローンチは手数料を誰にも指定していません。" },
   "claim.errNotYours": { en: "That launch earmarked its fees for a different account.", ja: "そのローンチは別のアカウント宛です。" },

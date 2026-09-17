@@ -8,7 +8,7 @@ import { usePrivy, useLinkAccount } from "@privy-io/react-auth";
 import { Button, Card, cx } from "@/components/ui";
 import { launchpadAbi } from "@/lib/abi";
 import { LAUNCHPAD_ADDRESS, chain } from "@/lib/config";
-import { PROVIDERS, type Provider } from "@/lib/commitment";
+import { OFFERED_PROVIDERS, PROVIDER_LABEL, type Provider } from "@/lib/commitment";
 import { shortAddress } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 
@@ -42,7 +42,8 @@ export default function ClaimPage() {
   const message = (code: string) =>
     ({
       "not-signed-in": t("claim.errSignIn"),
-      "account-not-linked": t("claim.errNotLinked", { p: provider }),
+      "account-not-linked": t("claim.errNotLinked", { p: PROVIDER_LABEL[provider] }),
+      "telegram-no-username": t("claim.errTelegramUsername"),
       "not-earmarked": t("claim.errNotEarmarked"),
       "not-your-earmark": t("claim.errNotYours"),
       "bad-token": t("claim.errBadToken"),
@@ -131,7 +132,7 @@ export default function ClaimPage() {
           <div>
             <p className="eyebrow mb-2">{t("claim.providerLabel")}</p>
             <div className="flex gap-2">
-              {PROVIDERS.map((p) => (
+              {OFFERED_PROVIDERS.map((p) => (
                 <button
                   key={p}
                   type="button"
@@ -146,7 +147,7 @@ export default function ClaimPage() {
                       : "border-line text-muted hover:border-line-bright",
                   )}
                 >
-                  {p === "x" ? "X" : p === "github" ? "GitHub" : "Discord"}
+                  {PROVIDER_LABEL[p]}
                 </button>
               ))}
             </div>

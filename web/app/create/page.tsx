@@ -12,7 +12,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import { EMPTY_COMMITMENT, accountReferrer } from "@/lib/referral";
-import { PROVIDERS, commitmentFor, labelFor, type Provider } from "@/lib/commitment";
+import { OFFERED_PROVIDERS, PROVIDER_LABEL, commitmentFor, labelFor, type Provider } from "@/lib/commitment";
 
 import { Badge, Button, Card, cx } from "@/components/ui";
 import { ImagePicker } from "@/components/ImagePicker";
@@ -769,9 +769,9 @@ export default function CreatePage() {
                           onChange={(e) => setProvider(e.target.value as Provider)}
                           className="border-2 border-line bg-void px-2 py-2.5 font-mono text-sm text-ink outline-none"
                         >
-                          {PROVIDERS.map((p) => (
+                          {OFFERED_PROVIDERS.map((p) => (
                             <option key={p} value={p}>
-                              {p === "x" ? "X" : p === "github" ? "GitHub" : "Discord"}
+                              {PROVIDER_LABEL[p]}
                             </option>
                           ))}
                         </select>
