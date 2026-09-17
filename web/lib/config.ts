@@ -83,6 +83,14 @@ export const chain: Chain = {
   blockExplorers: {
     default: { name: IS_MAINNET ? "Arc Explorer" : "ArcScan", url: EXPLORER_URL },
   },
+  // viem declares Multicall3 for arcTestnet but not for arc, so on mainnet every
+  // batched read -- the board, token pages, the indexer's launch scan -- threw
+  // "Chain Arc does not support contract multicall3". It is deployed on both
+  // networks at the canonical address.
+  contracts: {
+    ...BASE_CHAIN.contracts,
+    multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11", blockCreated: 0 },
+  },
 };
 
 /// Privy app id. Public by design -- it identifies the app to Privy's client
