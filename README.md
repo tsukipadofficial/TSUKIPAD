@@ -1,228 +1,303 @@
 # TSUKIPAD
 
 [![ci](https://github.com/tsukipadofficial/TSUKIPAD/actions/workflows/ci.yml/badge.svg)](https://github.com/tsukipadofficial/TSUKIPAD/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-c8ff2e.svg)](LICENSE)
+[![Arc Mainnet](https://img.shields.io/badge/Arc-Mainnet%20·%20chain%205042-08080a.svg)](https://explorer.arc.io/address/0x37Acbbd157966C3f1f7caFc904AA0cFAF9eBB9E2)
 
-A fair-launch token launchpad for [Arc](https://arc.io), Circle's stablecoin L1.
+**The token launchpad for [Arc](https://arc.io), built on Uniswap v4.**
 
-Two ways to launch, both free and both ending in a permanently locked
-Uniswap V3 USDC pool:
+Launch a token in one transaction. Liquidity is locked forever, the creator tax
+is fixed for life, and every fee — to creators, holders and the platform — is
+paid in **USDC**, never in the token.
 
-- **Bonding curve** (default). Trades on a constant-product curve from a ~$3.2K
-  market cap. Once **$10,400** has been raised the curve sells out and, in the
-  same transaction, that USDC plus the last 20% of supply become a full-range
-  Uniswap V3 position at the curve's final price — a **~$52K market cap** — with
-  no price jump and no migration step. Transfers open at graduation, so nobody
-  can seed the pool ahead of it. A 99% snipe tax on the first five seconds
-  (quartered every second) makes launch-block bots unprofitable; the creator,
-  their fee recipient and any wallets they declare are exempt, so a launch can
-  open with a developer buy.
-- **Direct pool**. Launches **straight into a real Uniswap V3 USDC pool** at a
-  ~$3K market cap, seeded entirely with single-sided liquidity. Tradeable through
-  any router or aggregator from its first block.
+**[tsukipad.com](https://www.tsukipad.com)** · Live on Arc Mainnet (chain `5042`)
 
-The creator supplies no USDC either way, and there is no presale.
+| Opening market cap | Creator tax | Fee split | Launch fee |
+|:--:|:--:|:--:|:--:|
+| **$2.5K** | **0–10%**, fixed | **70% creator · 30% platform** | **$0** |
 
 ---
 
-## The mechanic
+## Contents
 
-A Uniswap V3 position whose price range sits entirely **above** the current price
-holds only `token0`. That single fact is the whole design:
-
-1. The token is deployed with CREATE2 using a salt mined so its address sorts
-   **below** USDC (`0x3600…0000`), making it `token0`. Roughly 21% of addresses
-   qualify, so mining converges in a handful of attempts.
-2. A TOKEN/USDC pool is created and initialised at exactly `tickLower` — the
-   price corresponding to the chosen opening market cap.
-3. One position is minted over `[tickLower, tickUpper]`, funded purely with
-   tokens. **Zero USDC is required.**
-4. Buyers walking the price up the range are what fills the pool with USDC.
-
-That range *is* the bonding curve — except it is an ordinary Uniswap pool, so
-there is no migration risk and nothing to graduate.
-
-### Why it can't rug
-
-The liquidity position is owned by the `ArcLaunchpad` contract, which exposes no
-code path that calls `burn` with non-zero liquidity. The principal is not locked
-by a timelock someone can let lapse, or by a policy someone can change — **there
-is simply no function that can withdraw it.** Swap fees remain claimable, split
-between the creator and the protocol treasury.
-
-A test asserts this structurally: `test_launchpadHasNoCodePathThatBurnsLiquidity`
-fails if a future edit adds a second `.burn(` call to the contract.
+- [How it works](#how-it-works)
+- [Fees](#fees)
+- [Security model](#security-model)
+- [Deployments](#deployments)
+- [Architecture](#architecture)
+- [Development](#development)
+- [Deploying](#deploying)
+- [License](#license)
 
 ---
 
-## Measured economics
+## How it works
 
-From the test suite, for a 1B supply with a 1000× ceiling:
+Every token has a fixed supply of **1,000,000,000**, trades against USDC, and
+opens at about a **$2.5K** market cap. Creators choose where trading starts.
 
-| | |
+| | Bonding curve | Direct pool |
+|---|---|---|
+| Trading starts on | A price curve | A Uniswap v4 pool |
+| Moves to Uniswap v4 | Automatically, when **$9,350** is raised | From the first block |
+| Market cap at the pool | ~$52K at graduation | ~$2.5K, room to ~$2.49B |
+| Base trading fee | 1% | 1% |
+| Snipe protection | Yes | — |
+| Fee modes | Keep · Holders · Wallet | Keep · Holders · Wallet · Buy-back & burn · Social account |
+
+### Direct pool
+
+A Uniswap v4 position whose range sits entirely above the current price holds
+only one asset. TSUKIPAD mines a CREATE2 salt so the token sorts below USDC
+(`0x3600…0000`), opens the pool at the bottom of the range, and places the whole
+supply in a single position. **Launching requires no USDC from anyone**, and the
+price can only rise from the opening price: nobody buys in lower than the first
+buyer.
+
+### Bonding curve
+
+Trades on a constant-product curve until **$9,350** is raised. The buy that
+completes the curve also graduates it, in the same transaction:
+**17.98%** of supply and the raised USDC become a locked Uniswap v4 position at
+the curve's final price. There is no migration step to trigger and no price
+jump. Tokens left over from rounding are burned.
+
+A snipe tax on the first five seconds makes launch-block bots unprofitable. It
+starts at **99%** and quarters every second (99% → ~25% → ~6% → ~1.5% → ~0.4% →
+0). The creator, the fee recipient and up to 16 declared wallets are exempt.
+
+### Creator tax
+
+A creator may add a tax of **0–10%** on top of the base fee. It is enforced by a
+Uniswap v4 hook, so it applies wherever the token trades, not only on
+tsukipad.com:
+
+- charged on **buys and sells** alike;
+- carried over when a curve graduates into its pool;
+- taken **in USDC only** — the hook never takes the token, so tax never becomes
+  sell pressure;
+- **permanent** — the rate is recorded once and cannot be changed by anyone.
+
+### Developer buy
+
+Creators receive **no free supply**. A creator who wants to hold their token
+buys it inside the launch transaction, from their own pool, at the opening
+price. The USDC they spend stays in the pool, so there is liquidity to sell into
+from the first block, and the amount bought is recorded on-chain for buyers to
+see.
+
+### Address mark
+
+Every TSUKIPAD token address ends in `272`. The mark is cosmetic and never
+enforced on-chain; if a matching salt cannot be found quickly, the launch
+proceeds on an ordinary address.
+
+---
+
+## Fees
+
+Everything a launch earns — the base fee **and** the creator tax — is pooled and
+split **70% to the creator side and 30% to the platform**, at every tax rate.
+
+Example: a **$1,000** buy on a token with a **3%** tax.
+
+| | Amount |
+|---|--:|
+| Base fee (1%) | $10.00 |
+| Creator tax (3%) | $30.00 |
+| **Total fees** | **$40.00** |
+| Creator side (70%) | $28.00 |
+| Platform (30%) | $12.00 |
+
+**Referrals.** A direct-pool launch made through a referral link pays the
+referrer **10%** of the launch's fees, taken from the platform's share. The
+creator side is unaffected.
+
+**USDC only.** Uniswap pays pool fees on sells in the token. Before anything is
+split, the launchpad sells that side for USDC, so every payout is USDC.
+
+### Fee modes
+
+The creator side goes wherever the launch chose at creation. The choice is
+immutable.
+
+| Mode | Where the creator side goes | Curve | Direct |
+|---|---|:--:|:--:|
+| Keep | The creator's wallet, in USDC | ✓ | ✓ |
+| Holders | Every holder, pro rata to balance, claimable in USDC | ✓ | ✓ |
+| Wallet | A different wallet: a project, team or charity | ✓ | ✓ |
+| Buy-back & burn | Buys the token from its own pool and destroys it | | ✓ |
+| Social account | Held for an X or GitHub account without a wallet; returned to the treasury if unclaimed for 365 days | | ✓ |
+
+### Collecting
+
+Fees accrue inside the pool and are paid out by `collectFees` (and, for curve
+launches, `claimCreatorFees`). Both are **permissionless**: anyone may call them
+and pay the gas, but proceeds only ever go to the addresses recorded at launch.
+
+---
+
+## Security model
+
+**What the contracts guarantee**
+
+| Risk | Why it cannot happen |
 |---|---|
-| Opening market cap | **$3,029** |
-| After a $500 buy | $4,064 |
-| After $50k of buying | $857k |
-| Ceiling market cap | $3.01M |
-| **Total curve capacity** | **$96,392** |
-| Creator's cost | **$0** + gas |
+| Liquidity is pulled | Positions are owned by the launchpad, which has no code path that removes liquidity. A test fails if one is ever added. |
+| Fees are redirected | The fee recipient is written once at launch. There is no setter, no admin and no owner. |
+| The tax is raised later | The hook refuses to re-register a pool. The cap is 10%. |
+| The platform changes its terms | Treasury, platform share and all rates are immutable. |
+| Supply is inflated | Supply is minted once. It can only fall, through burns. |
+| A launch address is taken | Salts are namespaced by the creator's address. |
 
-The last row matters: about **$96k of net buying** takes a launch from $3k to
-sold-out. A higher ceiling spreads the same supply over a wider range, so price
-moves faster per dollar and total capacity falls. The create form shows this
-figure live so creators choose knowingly.
+**Trust assumptions**
 
-Offering more than the curve can absorb is safe — the buyer is only charged for
-what actually fills (`test_curveExhaustsAndDoesNotOverchargeTheBuyer`).
+- **Attestor.** The *social account* fee mode binds a wallet to an X or GitHub
+  account using a signature from a TSUKIPAD attestor key, since account
+  ownership cannot be verified on-chain. The signature is bound to the chain,
+  launchpad, token, recipient and deadline, and a launch can be claimed once.
+  The key can affect only earmarked launches that have not yet been claimed; it
+  cannot touch ordinary launches, liquidity, tokens or platform funds. It is
+  immutable.
+- **Uniswap v4.** Pools run on Uniswap's own `PoolManager` on Arc.
 
----
+**Testing.** 148 Foundry tests covering launches, graduation, fee accounting,
+the 70/30 split at every tax rate, buy-back & burn, holder rewards, escrow,
+referrals, partial fills and an adversarial suite. The hook and graduation
+suites also run against a fork of Arc Mainnet and Uniswap's deployed
+`PoolManager`. Collection was measured to be unprofitable to sandwich.
 
-## Repo layout
-
-```
-contracts/          Foundry project
-  src/
-    ArcLaunchpad.sol      direct launch + registry + fee collection
-    TsukiCurve.sol        bonding curve: trading, graduation, fee collection
-    LaunchToken.sol       fixed-supply ERC20, no mint/owner/tax
-    CurveToken.sol        LaunchToken whose transfers open at graduation
-    ArcSwapRouter.sol     minimal single-hop router (testnet only)
-    libraries/V3Math.sol  TickMath/FullMath/LiquidityAmounts ported to 0.8
-  script/
-    Deploy.s.sol          deploys Uniswap V3 + the launchpad stack
-    SeedDemo.s.sol        fills a local chain with demo launches
-web/                Next.js 16 app (App Router, wagmi + viem)
-scripts/local-dev.sh Local chain with the whole stack on it
-```
+> [!IMPORTANT]
+> The contracts have not undergone a third-party audit. Locked liquidity and
+> fixed rules protect users from abuse of the launchpad; they do not make any
+> token a good investment. Tokens can lose all their value.
 
 ---
 
-## Running it locally
+## Deployments
 
-Requires Node 20+, pnpm, and Foundry.
+### Arc Mainnet · chain `5042`
 
-```bash
-# terminal 1 — chain + contracts + demo data
-./scripts/local-dev.sh
+| Contract | Address |
+|---|---|
+| ArcLaunchpad | [`0x37Acbbd157966C3f1f7caFc904AA0cFAF9eBB9E2`](https://explorer.arc.io/address/0x37Acbbd157966C3f1f7caFc904AA0cFAF9eBB9E2) |
+| TsukiCurve | [`0xd8c5E582ea74a6BfC50b6920583B76EAbE4a2889`](https://explorer.arc.io/address/0xd8c5E582ea74a6BfC50b6920583B76EAbE4a2889) |
+| TsukiHook | [`0x8F0659d18A5CC563ea777C93343b9C66f9FaE0cc`](https://explorer.arc.io/address/0x8F0659d18A5CC563ea777C93343b9C66f9FaE0cc) |
+| TsukiRouter | [`0x43c1F2B8AefB0a3FBd63eB7aE68238bA5A6e3926`](https://explorer.arc.io/address/0x43c1F2B8AefB0a3FBd63eB7aE68238bA5A6e3926) |
+| TokenDeployer | [`0x53698012EB8b166542EE7434C0b371479eBF2Cb8`](https://explorer.arc.io/address/0x53698012EB8b166542EE7434C0b371479eBF2Cb8) |
+| Treasury | [`0xd4376D9fa9C9886d31091529737FC17e86028F11`](https://explorer.arc.io/address/0xd4376D9fa9C9886d31091529737FC17e86028F11) |
+| Uniswap v4 PoolManager | [`0x8366a39CC670B4001A1121B8F6A443A643e40951`](https://explorer.arc.io/address/0x8366a39CC670B4001A1121B8F6A443A643e40951) |
 
-# terminal 2 — the app
-cd web && pnpm dev
-```
+`TokenDeployer` is the single factory for every TSUKIPAD token, and the address
+to use for indexing. The machine-readable record is
+[`contracts/deployments/5042.json`](contracts/deployments/5042.json).
 
-`local-dev.sh` writes `web/.env.local` for you and prints a funded private key to
-import into your wallet (network: `http://127.0.0.1:8545`, chain id `5042002`).
+### Arc Testnet · chain `5042002`
 
-### Tests
-
-```bash
-cd contracts && forge test -vv
-```
-
-124 tests, run against the **genuine** Uniswap V3 factory and pool bytecode
-from the `@uniswap/v3-core` package rather than a reimplementation. The curve
-suite covers graduation at the curve price, front-run pools above and below it,
-solvency under fuzzed buy/sell sequences, and the snipe tax schedule.
+See [`contracts/deployments/5042002.json`](contracts/deployments/5042002.json).
 
 ---
 
-## Deploying to Arc testnet
-
-```bash
-cd contracts
-PRIVATE_KEY=0xyour_testnet_key \
-  forge script script/Deploy.s.sol:Deploy \
-  --rpc-url arc_testnet --broadcast
-```
-
-Get testnet USDC from the [Circle faucet](https://faucet.circle.com). You need
-USDC for gas — it is Arc's native gas asset.
-
-The script writes `contracts/deployments/5042002.json`; copy the addresses into
-`web/.env.local`:
+## Architecture
 
 ```
-NEXT_PUBLIC_LAUNCHPAD_ADDRESS=0x...
-NEXT_PUBLIC_SWAP_ROUTER_ADDRESS=0x...
-NEXT_PUBLIC_CURVE_ADDRESS=0x...
+contracts/src/
+  ArcLaunchpad.sol   Direct launches: pool seeding, fee collection and routing,
+                     buy-back & burn, escrow for social-account recipients
+  TsukiCurve.sol     Bonding curve: trading, snipe tax, graduation into v4
+  TsukiHook.sol      Uniswap v4 hook charging the creator tax in USDC
+  TsukiV4Pool.sol    Shared v4 plumbing: pool opening, locked minting, swaps
+  TsukiRouter.sol    Single-hop exact-input router used by the site
+  TokenDeployer.sol  CREATE2 factory for launch and curve tokens
+  LaunchToken.sol    Fixed-supply ERC-20 with optional USDC holder rewards
+  CurveToken.sol     LaunchToken for curve launches
 ```
 
-To add the bonding curve next to a launchpad that is already live (without
-redeploying it and losing its launches), use the curve-only script. It reads the
-factory and treasury from the deployments file and writes the curve back into it:
-
-```bash
-PRIVATE_KEY=0xyour_testnet_key \
-  forge script script/DeployCurve.s.sol:DeployCurve \
-  --rpc-url arc_testnet --broadcast
 ```
+contracts/   Foundry project: sources, tests, deploy scripts, deployment records
+web/         tsukipad.com — Next.js, wagmi, viem, Privy
+mobile/      Mobile app
+scripts/     Local development and ABI sync
+```
+
+The web app reads chain state directly and runs a small indexer on Vercel for
+trade history, positions and the leaderboard, backed by Redis. One variable,
+`NEXT_PUBLIC_NETWORK`, switches the whole app between testnet and mainnet.
 
 ---
 
-## Mainnet day (16 September 2026)
+## Development
 
-Uniswap [ships on Arc mainnet day one](https://cryptobriefing.com/uniswap-top-dex-stablecoin-trading-arc-launch/),
-alongside Aave and Aerodrome. The migration is a config change, not a rewrite:
-
-1. **Reuse canonical Uniswap.** `Deploy.s.sol` deploys a V3 factory only when
-   `V3_FACTORY` is unset. Set it to Uniswap's canonical Arc mainnet factory and
-   the script wires the launchpad to it instead.
-2. **Drop `ArcSwapRouter`.** It exists only because Arc testnet has no Uniswap.
-   Point the frontend at the official `SwapRouter02` / Universal Router — the
-   pools are ordinary V3 pools and need nothing bespoke.
-3. **Re-point the frontend.** Swap `arcTestnet` for Arc mainnet in
-   `web/lib/config.ts` and update the two addresses.
-4. **Verify the USDC address** on mainnet. It is expected to be the same
-   `0x3600…0000`, but confirm before deploying — the entire token-ordering
-   constraint is derived from it.
-
-Everything else — the launch math, the tick derivation, the lock guarantee — is
-chain-agnostic.
-
----
-
-## Notes and gotchas discovered along the way
-
-- **Arc's USDC has two decimal views.** The native gas balance carries 18
-  decimals; the ERC20 interface at `0x3600…0000` carries 6. They are the same
-  money. Mixing them up silently corrupts balance math. This app quotes USDC
-  exclusively through the 6-decimal ERC20 view.
-- **You cannot test USDC transfers against an anvil fork of Arc.** USDC is
-  native-backed, so `transfer` reverts on a fork while succeeding on the real
-  chain (`approve` and reads work fine either way). `local-dev.sh` therefore runs
-  a *fresh* anvil with a normal ERC20 installed at the USDC address.
-- **Arc testnet has no Uniswap.** Only a community V2 fork, which cannot do
-  single-sided launches. We deploy V3 ourselves; its BUSL licence expired in
-  April 2023, so core and periphery are GPL-2.0 and freely deployable. V4 core is
-  still BUSL until 2028 and was deliberately avoided.
-- **multicall3 is deployed on Arc** at the canonical address, and `viem`'s
-  `arcTestnet` chain declares it — so wagmi batches reads through it. A fresh
-  anvil does not have it, and batched reads fail silently; `local-dev.sh` copies
-  the bytecode across.
-- **`viem` ships `arcTestnet` built in.** Its RPC URLs use `arc.network` while
-  the docs advertise `arc.io`. Both work.
-
----
-
-## Status
-
-- Contracts: complete, 81 passing tests across 9 suites, including an adversarial suite.
-- Frontend: complete — board, create flow, token page with live trades and trading.
-- **Deployed to Arc testnet** (chain 5042002) — addresses in `contracts/deployments/5042002.json`.
-- Live at [tsukipad.com](https://www.tsukipad.com), verified end to end against the deployed contracts.
-- Arc mainnet is expected 16 September 2026; see `MAINNET.md` for the pre-flight checklist.
-- **Not audited.** Testnet only for now. Use at your own risk.
-
-
-## Running the tests
-
-The pool tests load prebuilt Uniswap V3 artifacts through `vm.getCode`, so the
-npm packages must be installed before Foundry runs:
+**Requirements:** [Foundry](https://book.getfoundry.sh), Node 20+, pnpm 10.
 
 ```bash
 git clone --recursive https://github.com/tsukipadofficial/TSUKIPAD.git
-cd TSUKIPAD/contracts/tools && npm ci
-cd .. && forge test
+cd TSUKIPAD
 ```
 
-81 tests across 9 suites, covering launches, the creator lock, fee accounting,
-buyback-and-burn, holder rewards, on-chain metadata, and an adversarial suite.
+### Contracts
+
+```bash
+cd contracts/tools && npm ci && cd ..
+forge build --sizes
+forge test
+```
+
+The fork suites re-run against Arc Mainnet state:
+
+```bash
+anvil --port 8547 --fork-url https://rpc.mainnet.arc.io
+forge test --match-path "test/*Fork.t.sol" --fork-url http://127.0.0.1:8547
+```
+
+> [!NOTE]
+> Arc's USDC is native-backed, so USDC transfers revert on a local fork while
+> succeeding on the real chain. Fork suites install a stand-in ERC-20 at the
+> USDC address; end-to-end checks with real USDC run on testnet.
+
+### Web app
+
+```bash
+./scripts/local-dev.sh   # local chain with the full stack deployed
+cd web && pnpm install && pnpm dev
+```
+
+`local-dev.sh` writes `web/.env.local` and prints a funded development key for
+the local chain only.
+
+---
+
+## Deploying
+
+`contracts/script/Deploy.s.sol` deploys the token factory, the hook (mined to
+the address its permissions require), both launchpads and the router, then
+writes `contracts/deployments/<chainId>.json`.
+
+On any network other than a local chain the script requires, and refuses to run
+without:
+
+- `TREASURY` — a wallet **different from the deployer**;
+- `V4_POOL_MANAGER` — Uniswap's own `PoolManager` (plus `V4_STATE_VIEW` and
+  `V4_QUOTER`).
+
+`ATTESTOR` sets the attestor address; it defaults to the deployer. Keep keys in
+an untracked env file — every `.env` and `.env*.local` file is ignored by git.
+
+```bash
+cd contracts
+set -a; . ./.env.mainnet.local; set +a
+forge script script/Deploy.s.sol:Deploy \
+  --rpc-url https://rpc.mainnet.arc.io --broadcast --slow
+```
+
+Treasury, attestor, platform share, referral rate, launch fee, graduation target
+and the tax cap are **immutable** once deployed.
+
+---
+
+## License
+
+[MIT](LICENSE) © TSUKIPAD
+
+TSUKIPAD is an independent project. It is not built, operated or reviewed by
+Circle or Uniswap Labs.
