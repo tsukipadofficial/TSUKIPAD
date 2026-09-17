@@ -2,7 +2,7 @@
 
 [![ci](https://github.com/tsukipadofficial/TSUKIPAD/actions/workflows/ci.yml/badge.svg)](https://github.com/tsukipadofficial/TSUKIPAD/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-c8ff2e.svg)](LICENSE)
-[![Arc Mainnet](https://img.shields.io/badge/Arc-Mainnet%20·%20chain%205042-08080a.svg)](https://explorer.arc.io/address/0x37Acbbd157966C3f1f7caFc904AA0cFAF9eBB9E2)
+[![Arc Mainnet](https://img.shields.io/badge/Arc-Mainnet%20·%20chain%205042-08080a.svg)](https://explorer.arc.io/address/0x1499c2D2c3a06F0C8c47D300aFdeA55F7B7F1211)
 
 **The token launchpad for [Arc](https://arc.io), built on Uniswap v4.**
 
@@ -180,11 +180,11 @@ suites also run against a fork of Arc Mainnet and Uniswap's deployed
 
 | Contract | Address |
 |---|---|
-| ArcLaunchpad | [`0x37Acbbd157966C3f1f7caFc904AA0cFAF9eBB9E2`](https://explorer.arc.io/address/0x37Acbbd157966C3f1f7caFc904AA0cFAF9eBB9E2) |
-| TsukiCurve | [`0xd8c5E582ea74a6BfC50b6920583B76EAbE4a2889`](https://explorer.arc.io/address/0xd8c5E582ea74a6BfC50b6920583B76EAbE4a2889) |
-| TsukiHook | [`0x8F0659d18A5CC563ea777C93343b9C66f9FaE0cc`](https://explorer.arc.io/address/0x8F0659d18A5CC563ea777C93343b9C66f9FaE0cc) |
-| TsukiRouter | [`0x43c1F2B8AefB0a3FBd63eB7aE68238bA5A6e3926`](https://explorer.arc.io/address/0x43c1F2B8AefB0a3FBd63eB7aE68238bA5A6e3926) |
-| TokenDeployer | [`0x53698012EB8b166542EE7434C0b371479eBF2Cb8`](https://explorer.arc.io/address/0x53698012EB8b166542EE7434C0b371479eBF2Cb8) |
+| ArcLaunchpad | [`0x1499c2D2c3a06F0C8c47D300aFdeA55F7B7F1211`](https://explorer.arc.io/address/0x1499c2D2c3a06F0C8c47D300aFdeA55F7B7F1211) |
+| TsukiCurve | [`0xD3f05983a898Fd567e54B2BeFFc453b0fD8A5E3c`](https://explorer.arc.io/address/0xD3f05983a898Fd567e54B2BeFFc453b0fD8A5E3c) |
+| TsukiHook | [`0x5dED8fc500d9a81A91D7B86D9003045f788120cc`](https://explorer.arc.io/address/0x5dED8fc500d9a81A91D7B86D9003045f788120cc) |
+| TsukiRouter | [`0x27F48693D9A911e536783e59c6E2Ca10de3A6353`](https://explorer.arc.io/address/0x27F48693D9A911e536783e59c6E2Ca10de3A6353) |
+| TokenDeployer | [`0x6C939437b344aC25fD577d7BB625E151457a1a4f`](https://explorer.arc.io/address/0x6C939437b344aC25fD577d7BB625E151457a1a4f) |
 | Treasury | [`0xd4376D9fa9C9886d31091529737FC17e86028F11`](https://explorer.arc.io/address/0xd4376D9fa9C9886d31091529737FC17e86028F11) |
 | Uniswap v4 PoolManager | [`0x8366a39CC670B4001A1121B8F6A443A643e40951`](https://explorer.arc.io/address/0x8366a39CC670B4001A1121B8F6A443A643e40951) |
 
