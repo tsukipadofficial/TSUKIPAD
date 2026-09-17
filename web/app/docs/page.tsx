@@ -41,6 +41,7 @@ const TOC = [
   { id: "collect", label: "Collecting fees" },
   { id: "safety", label: "What can't happen" },
   { id: "contracts", label: "Contracts" },
+  { id: "integrations", label: "For integrators" },
   { id: "faq", label: "FAQ" },
 ];
 
@@ -408,6 +409,103 @@ export default function DocsPage() {
             </div>
           </Section>
 
+          <Section id="integrations" title="For integrators">
+            <P>
+              For wallets, trading bots, screeners and explorers. Everything below is free and public: show
+              TSUKIPAD tokens with their real logo, links and fees without the creator paying for a listing.
+            </P>
+
+            <h3 className="mt-8 text-lg font-bold">Recognising a TSUKIPAD token</h3>
+            <P>
+              Every token is deployed by one factory,{" "}
+              <code className="tabular border border-line px-1 break-all">{TOKEN_DEPLOYER_ADDRESS}</code>, which emits{" "}
+              <code className="tabular border border-line px-1">TokenDeployed(token, pad, creator, curve, name, symbol)</code>.
+              Only count it when <code className="tabular border border-line px-1">pad</code> is the launchpad or the bonding
+              curve listed under <a href="#contracts" className="underline decoration-lime underline-offset-4 hover:text-lime">Contracts</a>.
+              Anyone can deploy a token that claims to be TSUKIPAD; only the pads&apos; records are authoritative.
+            </P>
+
+            <h3 className="mt-8 text-lg font-bold">Token API</h3>
+            <P>
+              No key, no rate card, readable from any origin. Returns <N>404</N> for any address TSUKIPAD did not launch.
+            </P>
+            <Code>{`GET https://www.tsukipad.com/api/token/{address}
+GET https://www.tsukipad.com/api/token/{address}/image`}</Code>
+            <P muted>
+              <code className="tabular">/image</code> returns the logo as a normal PNG, JPEG or WebP, cacheable
+              indefinitely — metadata is immutable once a token launches. Use it directly as an image URL.
+            </P>
+            <Code>{`{
+  "schema": "tsukipad.token.v1",
+  "chainId": ${chain.id},
+  "address": "0x…272",
+  "name": "beta",
+  "symbol": "BETA",
+  "decimals": 18,
+  "totalSupply": "1000000000000000000000000000",
+  "image": "https://www.tsukipad.com/api/token/0x…272/image",
+  "website": null, "twitter": null, "telegram": null,
+  "url": "https://www.tsukipad.com/token/0x…272",
+  "launchpad": { "name": "TSUKIPAD", "factory": "0x…", "contract": "0x…", "type": "direct" },
+  "creator": "0x…",
+  "feeRecipient": "0x…",
+  "feeMode": "creator",
+  "createdAt": 1789624749,
+  "graduated": true,
+  "fees": {
+    "poolFeeBps": 100, "creatorTaxBps": 300,
+    "buyBps": 400, "sellBps": 400,
+    "taxCurrency": "USDC", "immutable": true
+  },
+  "pool": {
+    "dex": "uniswap-v4", "poolId": "0x…",
+    "poolManager": "0x…", "hook": "0x…",
+    "currency0": "0x…272", "currency1": "0x3600…0000",
+    "fee": 10000, "tickSpacing": 200
+  }
+}`}</Code>
+            <P muted>
+              <code className="tabular">type</code> is <code className="tabular">direct</code> or{" "}
+              <code className="tabular">bonding_curve</code>. <code className="tabular">pool</code> is{" "}
+              <code className="tabular">null</code> for a curve that has not graduated. <code className="tabular">feeMode</code>{" "}
+              is one of <code className="tabular">creator</code>, <code className="tabular">wallet</code>,{" "}
+              <code className="tabular">holders</code>, <code className="tabular">buyback_burn</code>,{" "}
+              <code className="tabular">social_account</code>.
+            </P>
+
+            <h3 className="mt-8 text-lg font-bold">Showing the right tax</h3>
+            <P>
+              The creator tax is not built into the token contract, so a transfer-tax check will report{" "}
+              <N>0%</N>. It is charged by the pool&apos;s Uniswap v4 hook,{" "}
+              <code className="tabular border border-line px-1 break-all">{HOOK_ADDRESS}</code>, on every swap through any router:
+            </P>
+            <Bullets
+              items={[
+                <>A buy pays <N>fees.buyBps</N> in total: the <N>1%</N> pool fee plus the creator tax, taken from the USDC paid in.</>,
+                <>A sell pays <N>fees.sellBps</N> in total, with the tax taken from the USDC received.</>,
+                <>The rate is fixed at launch, capped at <N>{MAX_TAX}</N>, and the hook has no owner. It cannot block sells or change a fee.</>,
+              ]}
+            />
+
+            <h3 className="mt-8 text-lg font-bold">Pools and events</h3>
+            <P>
+              Every pool pairs the token (<code className="tabular">currency0</code>) with USDC at a <N>1%</N> fee and tick spacing{" "}
+              <N>200</N>, on Uniswap&apos;s own PoolManager. Useful events:
+            </P>
+            <Code>{`ArcLaunchpad  Launched(token, poolId, creator, feeRecipient, name, symbol,
+                       metadataURI, totalSupply, liquiditySupply,
+                       tickLower, tickUpper, liquidity)
+TsukiCurve    Launched(token, creator, name, symbol, metadataURI)
+TsukiCurve    Trade(token, trader, isBuy, usdcAmount, tokenAmount, fee,
+                    tokensSold, usdcRaised)
+TsukiCurve    Graduated(token, poolId, usdcToPool, tokensToPool, liquidity)
+PoolManager   Swap(id, sender, amount0, amount1, sqrtPriceX96, liquidity, tick, fee)`}</Code>
+            <P muted>
+              All TSUKIPAD contracts are source-verified on ArcScan and Sourcify. To integrate or ask a question, reach us on X
+              or Telegram, linked in the footer.
+            </P>
+          </Section>
+
           <Section id="faq" title="FAQ">
             <div className="space-y-3">
               {[
@@ -549,5 +647,13 @@ function SplitBar({
         ))}
       </div>
     </div>
+  );
+}
+
+function Code({ children }: { children: string }) {
+  return (
+    <pre className="brut tabular my-5 overflow-x-auto p-4 text-xs leading-relaxed text-ink">
+      <code>{children}</code>
+    </pre>
   );
 }
